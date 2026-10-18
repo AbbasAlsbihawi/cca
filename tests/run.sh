@@ -164,7 +164,7 @@ else
   mkdir -p $F/Contents/Resources
   plutil -create xml1 $F/Contents/Info.plist
   plutil -insert CFBundleIconFile -string AppIcon $F/Contents/Info.plist
-  print -rn -- 'fake-icon-bytes' > $F/Contents/Resources/AppIcon.icns
+  cp /System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericApplicationIcon.icns $F/Contents/Resources/AppIcon.icns
   D="$H/Applications/Claude Personal.app"
   out=$(run 'export CCA_CLAUDE_APP=$T/FakeClaude.app; cca app personal'); rc=$?
   yes "app personal exits 0" $rc
@@ -177,6 +177,21 @@ else
   out=$(run 'export CCA_CLAUDE_APP=$T/FakeClaude.app; cca app personal'); rc=$?
   yes "second app run exits 0" $rc
   [[ -d $D && ! -e $D/stale ]] && ok "second run replaces the app" || bad "second run replaces the app" "fresh app" "stale file kept or app missing"
+  out=$(run 'export CCA_CLAUDE_APP=$T/FakeClaude.app; cca app personal purple'); rc=$?
+  yes "app personal purple exits 0" $rc
+  eq "cca-color saved" purple "$(cat $D/Contents/Resources/cca-color 2>&1)"
+  cmp -s $F/Contents/Resources/AppIcon.icns $D/Contents/Resources/applet.icns && bad "purple icon is tinted" differs identical || ok "purple icon is tinted"
+  sum1=$(cksum < $D/Contents/Resources/applet.icns)
+  out=$(run 'export CCA_CLAUDE_APP=$T/FakeClaude.app; cca app personal'); rc=$?
+  yes "app without color exits 0" $rc
+  eq "color kept when none given" purple "$(cat $D/Contents/Resources/cca-color 2>&1)"
+  eq "tinted icon kept when none given" "$sum1" "$(cksum < $D/Contents/Resources/applet.icns)"
+  touch $D/stale
+  out=$(run 'export CCA_CLAUDE_APP=$T/FakeClaude.app; cca app personal nocolor'); rc=$?
+  no "unknown color is refused" $rc
+  has "unknown color lists colors" "purple" "$out"
+  [[ -e $D/stale ]] && eq "unknown color leaves launcher unchanged" purple "$(cat $D/Contents/Resources/cca-color 2>&1)" || bad "unknown color leaves launcher unchanged" "stale kept" "launcher rebuilt"
+  rm -f $D/stale
   mkdir -p "$H/Applications/Claude Other.app/Contents/Resources"
   out=$(run 'export CCA_CLAUDE_APP=$T/FakeClaude.app; cca app other'); rc=$?
   no "foreign app is refused" $rc

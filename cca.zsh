@@ -10,7 +10,7 @@
 #   2. a folder bound with `cca bind <name>` (that folder or a parent)
 #   3. the default account (~/.claude)
 #
-# The Claude desktop app works the same way: `cca app <name>` makes a
+# The Claude desktop app works the same way: `cca app <name> [color]` makes a
 # "Claude <Name>" launcher that opens the app with its own data folder
 # (--user-data-dir), so each account stays signed in to the app at once.
 #
@@ -264,12 +264,95 @@ _cca_open() {
   fi
 }
 
+# Colours `cca app` can tint the launcher icon with.
+typeset -ga _CCA_COLORS=(red orange yellow green teal blue purple pink gray)
+
+# Recolours an .icns: _cca_tint <src.icns> <dest.icns> <color>. Returns non-zero on any failure.
+_cca_tint() {
+  emulate -L zsh
+  local src=$1 dest=$2 color=$3 tmp
+  tmp=$(mktemp -d "${TMPDIR:-/tmp}/cca-tint.XXXXXX") || return 1
+  {
+    iconutil -c iconset -o $tmp/in.iconset $src >/dev/null 2>&1 || return 1
+    osascript -l JavaScript - $tmp/in.iconset $color >/dev/null 2>&1 <<'JS' || return 1
+ObjC.import('Cocoa');
+ObjC.import('CoreImage');
+function run(argv) {
+  var dir = argv[0], color = argv[1];
+  var hues = {red: 0, orange: 30, yellow: 50, green: 140, teal: 178, blue: 215, purple: 275, pink: 330};
+  var fm = $.NSFileManager.defaultManager;
+  var names = ObjC.deepUnwrap(fm.contentsOfDirectoryAtPathError(dir, $()));
+  var files = names.filter(function (n) { return /\.png$/.test(n); });
+  if (!files.length) throw new Error('no png');
+  var widths = {}, big = files[0];
+  files.forEach(function (n) {
+    widths[n] = $.NSBitmapImageRep.imageRepWithContentsOfFile(dir + '/' + n).pixelsWide;
+    if (widths[n] > widths[big]) big = n;
+  });
+  // Measure the hue of the plain tile area of the largest icon.
+  var rep = $.NSBitmapImageRep.imageRepWithContentsOfFile(dir + '/' + big);
+  var c = rep.colorAtXY(Math.floor(rep.pixelsWide * 0.5), Math.floor(rep.pixelsHigh * 0.12))
+             .colorUsingColorSpace($.NSColorSpace.sRGBColorSpace);
+  var tile = c.hueComponent * 360;
+  var sat = 1.3, bright = 0;
+  if (color === 'gray') sat = 0;
+  if (color === 'orange') { sat = 2.0; bright = 0.08; }
+  function tint(img, angle) {
+    var f = $.CIFilter.filterWithName('CIHueAdjust');
+    f.setValueForKey(img, 'inputImage');
+    f.setValueForKey(angle, 'inputAngle');
+    var g = $.CIFilter.filterWithName('CIColorControls');
+    g.setValueForKey(f.valueForKey('outputImage'), 'inputImage');
+    g.setValueForKey(sat, 'inputSaturation');
+    g.setValueForKey(bright, 'inputBrightness');
+    return g.valueForKey('outputImage');
+  }
+  // CIHueAdjust turns the colour in YIQ space, not HSV: positive angles raise the hue,
+  // but the result drifts. Adjust the angle on the tile colour until its hue hits the target.
+  var angle = 0;
+  if (color !== 'gray') {
+    var px = Math.floor(rep.pixelsWide * 0.5), py = Math.floor(rep.pixelsHigh * 0.88);
+    var probe = $.CIImage.imageWithContentsOfURL($.NSURL.fileURLWithPath(dir + '/' + big))
+                  .imageByCroppingToRect($.CGRectMake(px, py, 1, 1));
+    angle = (hues[color] - tile) * Math.PI / 180;
+    var best = angle, bestErr = 999;
+    for (var i = 0; i < 12; i++) {
+      var pr = $.NSBitmapImageRep.alloc.initWithCIImage(tint(probe, angle));
+      var h = pr.colorAtXY(0, 0).colorUsingColorSpace($.NSColorSpace.sRGBColorSpace).hueComponent * 360;
+      var d = hues[color] - h;
+      if (d > 180) d -= 360;
+      if (d < -180) d += 360;
+      if (Math.abs(d) < bestErr) { bestErr = Math.abs(d); best = angle; }
+      if (bestErr < 1) break;
+      angle += d * Math.PI / 180 / (1 + i / 3);
+    }
+    angle = best;
+  }
+  files.forEach(function (n) {
+    var img = $.CIImage.imageWithContentsOfURL($.NSURL.fileURLWithPath(dir + '/' + n));
+    var out = $.NSBitmapImageRep.alloc.initWithCIImage(tint(img, angle));
+    var png = out.representationUsingTypeProperties($.NSBitmapImageFileTypePNG, $({}));
+    if (!png.writeToFileAtomically(dir + '/' + n, true)) throw new Error('write failed');
+  });
+  return '';
+}
+JS
+    iconutil -c icns -o $dest $tmp/in.iconset >/dev/null 2>&1 || return 1
+  } always {
+    rm -rf $tmp
+  }
+}
+
 # Makes "~/Applications/Claude <Name>.app", a launcher for `cca open <name>`.
 _cca_app() {
   emulate -L zsh
-  local name=$1
+  local name=$1 color=$2
   if ! _cca_valid "$name"; then
-    _cca_err "usage: cca app <name>"
+    _cca_err "usage: cca app <name> [color]. Colors: ${(j:, :)_CCA_COLORS}"
+    return 1
+  fi
+  if [[ -n $color && ${_CCA_COLORS[(Ie)$color]} -eq 0 ]]; then
+    _cca_err "unknown color '$color'. Colors: ${(j:, :)_CCA_COLORS}"
     return 1
   fi
   local dest="$HOME/Applications/Claude ${(C)name}.app"
@@ -279,6 +362,9 @@ _cca_app() {
     _cca_err "$dest exists and was not made by cca, so it was left alone"
     return 1
   fi
+  # No colour given: keep the one saved in the existing launcher.
+  [[ -z $color && -r $res/cca-color ]] && color=$(<$res/cca-color)
+  [[ ${_CCA_COLORS[(Ie)$color]} -eq 0 ]] && color=
   _cca_exists $name || _cca_create $name || return 1
   rm -rf $dest
   mkdir -p $HOME/Applications
@@ -287,10 +373,20 @@ _cca_app() {
   # Show the Claude icon instead of the script icon.
   if [[ -n $icon ]]; then
     cp $CCA_CLAUDE_APP/Contents/Resources/${icon%.icns}.icns $res/applet.icns
+    if [[ -n $color ]]; then
+      if _cca_tint $CCA_CLAUDE_APP/Contents/Resources/${icon%.icns}.icns $res/applet.tmp.icns $color; then
+        mv -f $res/applet.tmp.icns $res/applet.icns
+      else
+        rm -f $res/applet.tmp.icns
+        print -u2 -r -- "cca: could not tint the icon $color, kept the plain icon"
+        color=
+      fi
+    fi
     rm -f $res/Assets.car
     plutil -remove CFBundleIconName $dest/Contents/Info.plist 2>/dev/null
   fi
   print -r -- $name > $res/cca-account
+  [[ -n $color ]] && print -r -- $color > $res/cca-color
   codesign --force --sign - $dest 2>/dev/null
   touch $dest
   print -r -- "Made: $dest"
@@ -345,7 +441,8 @@ _cca_help() {
   cca unbind [folder]        remove a folder binding
   cca run <name> [args]      run claude once with an account
   cca list                   list accounts with their emails
-  cca app <name>             make a 'Claude <Name>' app in ~/Applications for that account
+  cca app <name> [color]     make a 'Claude <Name>' app in ~/Applications for that account
+                             (colors: red orange yellow green teal blue purple pink gray)
   cca open <name>            open the Claude app for an account (or bring it to the front)
 
 Order: cca use > folder binding > default account (~/.claude).

@@ -76,7 +76,7 @@ rm -rf ~/.claude-accounts
 | `cca unbind [folder]` | يزيل ربط مجلد |
 | `cca run <name> [args]` | يشغّل claude مرة واحدة بحساب |
 | `cca list` | يعرض الحسابات مع بريدها الإلكتروني |
-| `cca app <name>` | ينشئ تطبيق 'Claude <Name>' في ~/Applications لذلك الحساب |
+| `cca app <name> [color]` | ينشئ تطبيق 'Claude <Name>' في ~/Applications لذلك الحساب، بأيقونة ملونة |
 | `cca open <name>` | يفتح تطبيق Claude لحساب (أو يعرضه في المقدمة إن كان مفتوحاً) |
 
 ## الحساب الذي يستخدمه `claude`
@@ -98,6 +98,8 @@ cca app personal
 ```
 
 يُنشئ هذا الأمر `~/Applications/Claude Personal.app`. اسحبه إلى Dock.
+
+أعطه لوناً للتمييز بين الحسابات: `cca app personal purple`. الألوان: red وorange وyellow وgreen وteal وblue وpurple وpink وgray. إذا أعدت تشغيل `cca app personal` لاحقاً فسيحتفظ باللون. اللون غير المعروف خطأ ولا يغيّر شيئاً. إذا تعذّر تلوين الأيقونة، يظهر تحذير وتبقى الأيقونة العادية.
 
 عند النقر على المشغِّل، تُفتح نسخة تطبيق Claude الخاصة بذلك الحساب، أو تُعرض في المقدمة إن كانت مفتوحة. لا يفتح نسخة ثانية على البيانات نفسها أبداً.
 

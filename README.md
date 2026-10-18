@@ -76,7 +76,7 @@ rm -rf ~/.claude-accounts
 | `cca unbind [folder]` | remove a folder binding |
 | `cca run <name> [args]` | run claude once with an account |
 | `cca list` | list accounts with their emails |
-| `cca app <name>` | make a 'Claude <Name>' app in ~/Applications for that account |
+| `cca app <name> [color]` | make a 'Claude <Name>' app in ~/Applications for that account, with a coloured icon |
 | `cca open <name>` | open the Claude app for an account (or bring it to the front) |
 
 ## Which account `claude` uses
@@ -98,6 +98,8 @@ cca app personal
 ```
 
 This makes `~/Applications/Claude Personal.app`. Drag it to the Dock.
+
+Give it a colour to tell accounts apart: `cca app personal purple`. Colours: red, orange, yellow, green, teal, blue, purple, pink, gray. Run `cca app personal` again later and it keeps the colour. An unknown colour is an error and changes nothing. If the icon cannot be tinted, you get a warning and the plain icon.
 
 Clicking the launcher opens that account's copy of the Claude app, or brings it to the front. It never opens a second copy on the same data.
 
