@@ -241,5 +241,43 @@ no "remove: refuses while its app is open" $rc
 [[ -d $A/profiles/other ]] && ok "remove: nothing moved when refused" || bad "remove: nothing moved when refused" "kept" "gone"
 out=$(run 'cca remove nope'); no "remove: unknown account" $?
 
+# 16. cca import
+mk_home
+U=11111111-2222-3333-4444-555555555555 O=aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+C1=99999999-0000-0000-0000-000000000001 C2=99999999-0000-0000-0000-000000000002
+MS="$H/Library/Application Support/Claude/claude-code-sessions/$U/$O"
+mkdir -p $MS $H/.claude/projects/-w-p/$C1/subagents
+print -r -- "{\"sessionId\":\"local_1\",\"cliSessionId\":\"$C1\"}" > $MS/local_1.json
+print -r -- $'{\n  "sessionId": "local_2",\n  "cliSessionId": "'$C2$'"\n}' > $MS/local_2.json
+print -r -- x > $MS/archived-sessions.idx
+print -r -- t1 > $H/.claude/projects/-w-p/$C1.jsonl
+print -r -- s > $H/.claude/projects/-w-p/$C1/subagents/a.jsonl
+prof personal
+print -r -- "{\"oauthAccount\":{\"accountUuid\":\"$U\"}}" > $A/profiles/personal/.claude.json
+out=$(run 'ps() { :; }; cca import personal --dry-run')
+has "import dry run: counts" "Would import into 'personal' (account 11111111…): 3 session files, 1 transcripts." "$out"
+[[ ! -e $A/desktop/personal ]] && ok "import dry run: copies nothing" || bad "import dry run: copies nothing" "no folder" "folder made"
+out=$(run 'ps() { :; }; cca import personal')
+has "import: copies" "Imported into 'personal' (account 11111111…): 3 session files, 1 transcripts." "$out"
+has "import: reports missing transcripts" "1 sessions have no transcript" "$out"
+D=$A/desktop/personal/claude-code-sessions/$U/$O
+[[ -f $D/local_1.json && -f $D/local_2.json && -f $D/archived-sessions.idx ]] \
+  && ok "import: session files copied" || bad "import: session files copied" "3 files" "$(ls $D 2>&1)"
+[[ -f $A/profiles/personal/projects/-w-p/$C1.jsonl && -f $A/profiles/personal/projects/-w-p/$C1/subagents/a.jsonl ]] \
+  && ok "import: transcript and subagents copied" || bad "import: transcript and subagents copied" "copied" "missing"
+eq "import: main app unchanged" 3 "$(ls $MS | wc -l | tr -d ' ')"
+print -r -- mine > $D/local_1.json
+out=$(run 'ps() { :; }; cca import personal')
+has "import again: nothing new" "0 session files, 0 transcripts" "$out"
+eq "import: never overwrites" mine "$(<$D/local_1.json)"
+out=$(run 'cca import work'); no "import: default account refused" $?
+out=$(run 'ps() { print -r -- " 9 /Applications/Claude.app/Contents/MacOS/Claude --user-data-dir=$CCA_HOME/desktop/personal"; }; cca import personal'); no "import: refuses while its app is open" $?
+prof other
+out=$(run 'ps() { :; }; cca import other'); rc=$?
+no "import: unknown account refused" $rc
+has "import: lists accounts in the main app" "$U  2 sessions" "$out"
+out=$(run "ps() { :; }; cca import other --account $U --dry-run")
+has "import --account" "Would import into 'other'" "$out"
+
 print -r -- "$pass passed, $fail failed"
 (( fail == 0 ))

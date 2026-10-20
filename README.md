@@ -79,6 +79,7 @@ rm -rf ~/.claude-accounts
 | `cca app <name> [color]` | make a 'Claude <Name>' app in ~/Applications for that account, with a coloured icon |
 | `cca open <name>` | open the Claude app for an account (or bring it to the front) |
 | `cca remove <name>` | log out an account; move its folders and launcher to the Trash |
+| `cca import <name> [-n]` | copy its old Code sessions from the main Claude app (`-n`: dry run) |
 
 ## Which account `claude` uses
 
@@ -139,6 +140,17 @@ These stay separate for each account:
 - `~/.claude-accounts/desktop/<name>/`: data folder of each desktop copy
 - `~/Applications/Claude <Name>.app`: desktop launchers
 - one line in `~/.zshrc` that loads `cca.zsh`
+
+## Bringing old conversations into a copy
+
+If you used the main Claude app with an account before giving it its own copy, its Code tab sessions are still in the main app. Copy them over:
+
+```sh
+cca import personal --dry-run   # shows what would be copied
+cca import personal
+```
+
+Quit that account's copy first. It copies the session list and the transcripts they point to; it never overwrites or deletes anything, and the main app keeps its copy. The account is found from its terminal login (`cca login`) or from the one account its copy has signed in with; otherwise pass `--account <uuid>`. Chats in the Chat tab live on Anthropic's servers and show up by themselves once the copy is signed in to that account.
 
 ## Removing an account
 

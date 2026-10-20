@@ -20,6 +20,7 @@
 : ${CCA_CLAUDE_APP:=/Applications/Claude.app}
 : ${CCA_MAIN_DIR:=$HOME/.claude}
 : ${CCA_MAIN_JSON:=$HOME/.claude.json}
+: ${CCA_MAIN_APP_DATA:="$HOME/Library/Application Support/Claude"}
 typeset -ga CCA_SHARED=(settings.json CLAUDE.md skills plugins agents commands output-styles keybindings.json)
 
 # Remember which file this shell loaded and when it changed, so `cca` can
@@ -456,6 +457,97 @@ _cca_remove() {
   fi
 }
 
+# Prints the Claude account UUID of a cca account: from its terminal login,
+# or from the one account its Claude app copy has signed in with.
+_cca_account_uuid() {
+  emulate -L zsh
+  local json=$CCA_HOME/profiles/$1/.claude.json id
+  local -a dirs
+  if [[ -r $json ]]; then
+    if (( $+commands[jq] )); then
+      id=$(jq -r '.oauthAccount.accountUuid // empty' $json 2>/dev/null)
+    elif [[ $(<$json) =~ '"accountUuid"[[:space:]]*:[[:space:]]*"([0-9a-f-]+)"' ]]; then
+      id=$match[1]
+    fi
+  fi
+  if [[ -z $id ]]; then
+    dirs=($CCA_HOME/desktop/$1/claude-code-sessions/*(N/:t))
+    (( $#dirs == 1 )) && id=$dirs[1]
+  fi
+  [[ -n $id ]] && print -r -- $id
+}
+
+# Copies an account's Claude Code sessions from the main Claude app into its
+# own app copy, plus the transcripts they point to. Never overwrites or deletes.
+_cca_import() {
+  emulate -L zsh
+  setopt local_options null_glob
+  local name dry acct pid f rel id t slug
+  local -a hits
+  while (( $# )); do
+    case $1 in
+      -n|--dry-run) dry=1 ;;
+      --account)    acct=$2; shift ;;
+      *)            name=$1 ;;
+    esac
+    shift
+  done
+  if ! _cca_exists "$name" || [[ $name == "$(_cca_default_name)" ]]; then
+    _cca_err "usage: cca import <name> [--dry-run] [--account <uuid>]  (not the default account)"
+    return 1
+  fi
+  if pid=$(_cca_app_pid $name); then
+    _cca_err "the Claude app for '$name' is open (PID $pid). Quit it first (Cmd+Q)."
+    return 1
+  fi
+  local sessions=$CCA_MAIN_APP_DATA/claude-code-sessions
+  [[ -n $acct ]] || acct=$(_cca_account_uuid $name)
+  if [[ -z $acct || ! -d $sessions/$acct ]]; then
+    _cca_err "can't tell which sessions in the main Claude app belong to '$name'."
+    _cca_err "Log it in once (cca login $name), or pass --account <uuid>. Accounts there:"
+    for f in $sessions/*(/); do
+      hits=($f/**/local_*.json(.))
+      _cca_err "  ${f:t}  $#hits sessions"
+    done
+    return 1
+  fi
+  local src=$sessions/$acct dst=$CCA_HOME/desktop/$name/claude-code-sessions/$acct
+  local from=$CCA_MAIN_DIR/projects to=$CCA_HOME/profiles/$name/projects
+  integer n_new=0 n_old=0 t_new=0 t_old=0 t_none=0
+  if [[ -z $dry ]]; then
+    mkdir -p $CCA_HOME/desktop/$name && chmod 700 $CCA_HOME/desktop $CCA_HOME/desktop/$name || return 1
+  fi
+  # The session list files.
+  for f in $src/**/*(.); do
+    rel=${f#$src/}
+    [[ ${rel:t} == .DS_Store ]] && continue
+    if [[ -e $dst/$rel ]]; then n_old+=1; continue; fi
+    n_new+=1
+    [[ -n $dry ]] || { mkdir -p $dst/${rel:h} && cp -p $f $dst/$rel } || return 1
+  done
+  # The transcripts (and subagent folders) those sessions point to.
+  for f in $src/**/local_*.json(.); do
+    [[ $(<$f) =~ '"cliSessionId"[[:space:]]*:[[:space:]]*"([0-9a-f-]+)"' ]] || continue
+    id=$match[1]
+    hits=($from/*/$id.jsonl)
+    if (( ! $#hits )); then t_none+=1; continue; fi
+    for t in $hits; do
+      slug=${t:h:t}
+      if [[ -e $to/$slug/$id.jsonl ]]; then t_old+=1; continue; fi
+      t_new+=1
+      [[ -n $dry ]] && continue
+      mkdir -p $to/$slug && cp -p $t $to/$slug/ || return 1
+      [[ -d ${t:r} && ! -e $to/$slug/$id ]] && cp -Rp ${t:r} $to/$slug/
+    done
+  done
+  local what=Imported
+  [[ -n $dry ]] && what="Would import"
+  print -r -- "$what into '$name' (account ${acct[1,8]}…): $n_new session files, $t_new transcripts."
+  (( n_old || t_old )) && print -r -- "Already there, left as is: $n_old session files, $t_old transcripts."
+  (( t_none )) && print -r -- "$t_none sessions have no transcript on this Mac; they will list but not open."
+  [[ -n $dry ]] || print -r -- "Nothing in the main Claude app was changed. Sign '$name' in with that account to see them in the Code tab."
+}
+
 _cca_list() {
   emulate -L zsh
   local r=$(_cca_resolve) name dir json email org mark
@@ -506,6 +598,7 @@ _cca_help() {
                              (colors: red orange yellow green teal blue purple pink gray)
   cca open <name>            open the Claude app for an account (or bring it to the front)
   cca remove <name>          log out an account; move its folders and launcher to the Trash
+  cca import <name> [-n]     copy its old Code sessions from the main Claude app (-n: dry run)
 
 Order: cca use > folder binding > default account (~/.claude).
 Set CCA_QUIET=1 to hide the line 'claude' prints about the account."
@@ -536,6 +629,7 @@ cca() {
     app)            _cca_app "$@" ;;
     open)           _cca_open "$@" ;;
     remove|rm)      _cca_remove "$@" ;;
+    import)         _cca_import "$@" ;;
     help|-h|--help) _cca_help ;;
     *)              _cca_err "unknown command '$cmd'"; _cca_help; return 1 ;;
   esac
@@ -560,12 +654,12 @@ claude() {
 }
 
 _cca_complete() {
-  local -a cmds=(status list add login use bind unbind run app open remove help)
+  local -a cmds=(status list add login use bind unbind run app open remove import help)
   if (( CURRENT == 2 )); then
     compadd -a cmds
   elif (( CURRENT == 3 )); then
     case $words[2] in
-      login|use|bind|run|app|open|remove) compadd -- ${(f)"$(_cca_profiles)"} ;;
+      login|use|bind|run|app|open|remove|import) compadd -- ${(f)"$(_cca_profiles)"} ;;
       unbind)             _files -/ ;;
     esac
   elif (( CURRENT == 4 )) && [[ $words[2] == bind ]]; then
