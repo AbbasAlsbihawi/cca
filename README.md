@@ -78,6 +78,7 @@ rm -rf ~/.claude-accounts
 | `cca list` | list accounts with their emails |
 | `cca app <name> [color]` | make a 'Claude <Name>' app in ~/Applications for that account, with a coloured icon |
 | `cca open <name>` | open the Claude app for an account (or bring it to the front) |
+| `cca remove <name>` | log out an account; move its folders and launcher to the Trash |
 
 ## Which account `claude` uses
 
@@ -139,10 +140,20 @@ These stay separate for each account:
 - `~/Applications/Claude <Name>.app`: desktop launchers
 - one line in `~/.zshrc` that loads `cca.zsh`
 
+## Removing an account
+
+```sh
+cca remove personal
+```
+
+This logs the account out, drops its folder bindings, and moves its config folder, desktop data and launcher to the Trash (use Put Back to undo). Quit that account's Claude app first. For the default account only the login and launcher go; `~/.claude` stays.
+
 ## Troubleshooting
 
 - `command not found: cca`: open a new terminal, or run `source ~/.zshrc`.
+- After updating cca, open terminals pick up the new version by themselves on the next `cca` command.
 - A desktop copy shows the wrong account: quit all Claude copies, open only that one, log out, then log in.
+- Signing in picks the wrong Google account: type the email and use "Continue with email" instead of "Continue with Google".
 - The terminal uses the wrong account: run `cca login <name>`.
 
 ## Tests

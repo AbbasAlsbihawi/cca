@@ -199,5 +199,47 @@ else
 fi
 
 print
+# 14. reload after an update
+mk_home
+cp $REPO/cca.zsh $T/cca-copy.zsh
+out=$(env -u CLAUDECODE HOME=$H PATH=$T/bin:$PATH T=$T zsh -f -c '
+  source $T/cca-copy.zsh
+  print -r -- "_cca_help() { print -r -- RELOADED }" >> $T/cca-copy.zsh
+  touch -t 203001010000 $T/cca-copy.zsh
+  cca help' 2>&1)
+eq "cca reloads itself after the file changes" RELOADED "$out"
+out=$(run 'cca help' | head -1)
+has "unchanged file: normal help" "cca — switch" "$out"
+
+# 15. cca remove
+mk_home
+print -r -- "#!/bin/sh
+echo \"CFG=\${CLAUDE_CONFIG_DIR-UNSET} ARGS=\$*\" >> $T/claude.log" > $T/bin/claude
+prof personal; prof other
+mkdir -p $A/desktop/personal $T/work/p $T/work/o
+for n in Personal Work; do
+  mkdir -p "$H/Applications/Claude $n.app/Contents/Resources"
+  print -r -- ${(L)n} > "$H/Applications/Claude $n.app/Contents/Resources/cca-account"
+done
+print -r -- "$T/work/p"$'\t'"personal"$'\n'"$T/work/o"$'\t'"other" > $A/bindings
+rm -f $T/claude.log
+out=$(run 'ps() { :; }; CCA_TRASH=$T/trash cca remove personal')
+has "remove: message" "Removed 'personal'" "$out"
+has "remove: logs out the account" "CFG=$A/profiles/personal ARGS=auth logout" "$(<$T/claude.log)"
+[[ ! -e $A/profiles/personal && ! -e $A/desktop/personal && ! -e "$H/Applications/Claude Personal.app" ]] \
+  && ok "remove: folders and launcher gone" || bad "remove: folders and launcher gone" "gone" "still there"
+eq "remove: 3 items in the Trash" 3 "$(ls $T/trash | wc -l | tr -d ' ')"
+eq "remove: only its bindings dropped" "$T/work/o"$'\t'"other" "$(<$A/bindings)"
+[[ -d $A/profiles/other ]] && ok "remove: other accounts untouched" || bad "remove: other accounts untouched" "kept" "gone"
+rm -f $T/claude.log
+out=$(run 'ps() { :; }; CCA_TRASH=$T/trash cca remove work')
+has "remove default: logs out ~/.claude" "CFG=UNSET ARGS=auth logout" "$(<$T/claude.log)"
+[[ ! -e "$H/Applications/Claude Work.app" && -d $H/.claude ]] \
+  && ok "remove default: launcher gone, ~/.claude kept" || bad "remove default: launcher gone, ~/.claude kept" "yes" "no"
+out=$(run 'ps() { print -r -- " 9 /Applications/Claude.app/Contents/MacOS/Claude --user-data-dir=$CCA_HOME/desktop/other"; }; CCA_TRASH=$T/trash cca remove other'); rc=$?
+no "remove: refuses while its app is open" $rc
+[[ -d $A/profiles/other ]] && ok "remove: nothing moved when refused" || bad "remove: nothing moved when refused" "kept" "gone"
+out=$(run 'cca remove nope'); no "remove: unknown account" $?
+
 print -r -- "$pass passed, $fail failed"
 (( fail == 0 ))

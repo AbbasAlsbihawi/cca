@@ -22,6 +22,12 @@
 : ${CCA_MAIN_JSON:=$HOME/.claude.json}
 typeset -ga CCA_SHARED=(settings.json CLAUDE.md skills plugins agents commands output-styles keybindings.json)
 
+# Remember which file this shell loaded and when it changed, so `cca` can
+# reload itself after an update instead of running old code.
+typeset -g CCA_SCRIPT=${${(%):-%x}:A}
+zmodload -F zsh/stat b:zstat 2>/dev/null
+typeset -g CCA_LOADED=$(zstat +mtime -- $CCA_SCRIPT 2>/dev/null)
+
 _cca_err() { print -ru2 -- "cca: $*" }
 
 _cca_valid() { [[ $1 =~ '^[a-z0-9][a-z0-9_-]*$' ]] }
@@ -389,9 +395,64 @@ _cca_app() {
   [[ -n $color ]] && print -r -- $color > $res/cca-color
   codesign --force --sign - $dest 2>/dev/null
   touch $dest
+  # Make Finder and the Dock show the new icon now, not a cached one.
+  /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f $dest 2>/dev/null
   print -r -- "Made: $dest"
-  if [[ $name != "$(_cca_default_name)" ]]; then
+  if [[ $name != "$(_cca_default_name)" && ! -d $CCA_HOME/desktop/$name ]]; then
     print -r -- "First sign-in: quit every Claude window (Cmd+Q), open 'Claude ${(C)name}', sign in, then reopen the others."
+  fi
+}
+
+# Moves a file or folder to the Trash, so a removal can be undone.
+_cca_trash() {
+  if [[ -n $CCA_TRASH ]]; then
+    mkdir -p $CCA_TRASH && mv $1 $CCA_TRASH/${1:t}.$(date +%s).$RANDOM
+  elif [[ -x /usr/bin/trash ]]; then
+    /usr/bin/trash $1
+  else
+    mv $1 $HOME/.Trash/${1:t}.$(date +%s).$RANDOM
+  fi
+}
+
+# Drops every folder binding that points to account $1.
+_cca_drop_account_bindings() {
+  emulate -L zsh
+  local f=$CCA_HOME/bindings line
+  local -a keep
+  [[ -r $f ]] || return 0
+  for line in "${(@f)$(<$f)}"; do
+    [[ -z $line || ${line#*$'\t'} == "$1" ]] || keep+=($line)
+  done
+  if (( $#keep )); then print -rl -- $keep > $f; else : > $f; fi
+}
+
+# Removes an account: logs it out, drops its folder bindings and moves its
+# config folder, Claude app data and launcher to the Trash. The default
+# account keeps ~/.claude; only its login and launcher go.
+_cca_remove() {
+  emulate -L zsh
+  local name=$1 dir data pid default=$(_cca_default_name)
+  local app="$HOME/Applications/Claude ${(C)name}.app"
+  if ! _cca_exists "$name"; then
+    _cca_err "usage: cca remove <name>. Accounts: ${(j:, :)${(f)"$(_cca_profiles)"}}"
+    return 1
+  fi
+  if [[ $name != "$default" ]] && pid=$(_cca_app_pid $name); then
+    _cca_err "the Claude app for '$name' is open (PID $pid). Quit it first (Cmd+Q)."
+    return 1
+  fi
+  dir=$(_cca_dir $name)
+  data=$(_cca_app_data $name)
+  _cca_exec $name claude auth logout >/dev/null 2>&1
+  _cca_drop_account_bindings $name
+  [[ -e $app/Contents/Resources/cca-account ]] && _cca_trash $app
+  [[ -n $data && -d $data ]] && _cca_trash $data
+  [[ -n $dir && -d $dir ]] && _cca_trash $dir
+  [[ $CCA_ACCOUNT == "$name" ]] && unset CCA_ACCOUNT
+  if [[ $name == "$default" ]]; then
+    print -r -- "Logged out '$name' and moved its launcher to the Trash. ~/.claude and its settings stay."
+  else
+    print -r -- "Removed '$name': logged out and moved its folders and launcher to the Trash."
   fi
 }
 
@@ -444,14 +505,22 @@ _cca_help() {
   cca app <name> [color]     make a 'Claude <Name>' app in ~/Applications for that account
                              (colors: red orange yellow green teal blue purple pink gray)
   cca open <name>            open the Claude app for an account (or bring it to the front)
+  cca remove <name>          log out an account; move its folders and launcher to the Trash
 
 Order: cca use > folder binding > default account (~/.claude).
 Set CCA_QUIET=1 to hide the line 'claude' prints about the account."
 }
 
 cca() {
-  # Claude Code's shell snapshot keeps cca but drops the _cca_* helpers.
-  (( $+functions[_cca_status] )) || source ${CCA_HOME:-$HOME/.claude-accounts}/cca.zsh
+  # Reload when the file changed since this shell loaded it (an update), or
+  # when Claude Code's shell snapshot kept cca but dropped the _cca_* helpers.
+  local src=${CCA_SCRIPT:-${CCA_HOME:-$HOME/.claude-accounts}/cca.zsh}
+  local -a mtime
+  zmodload -F zsh/stat b:zstat 2>/dev/null
+  zstat -A mtime +mtime -- $src 2>/dev/null
+  if (( ! $+functions[_cca_status] )) || [[ $mtime[1] != $CCA_LOADED ]]; then
+    source $src
+  fi
   emulate -L zsh
   local cmd=${1:-status}
   (( $# )) && shift
@@ -466,6 +535,7 @@ cca() {
     run)            _cca_run "$@" ;;
     app)            _cca_app "$@" ;;
     open)           _cca_open "$@" ;;
+    remove|rm)      _cca_remove "$@" ;;
     help|-h|--help) _cca_help ;;
     *)              _cca_err "unknown command '$cmd'"; _cca_help; return 1 ;;
   esac
@@ -490,12 +560,12 @@ claude() {
 }
 
 _cca_complete() {
-  local -a cmds=(status list add login use bind unbind run app open help)
+  local -a cmds=(status list add login use bind unbind run app open remove help)
   if (( CURRENT == 2 )); then
     compadd -a cmds
   elif (( CURRENT == 3 )); then
     case $words[2] in
-      login|use|bind|run|app|open) compadd -- ${(f)"$(_cca_profiles)"} ;;
+      login|use|bind|run|app|open|remove) compadd -- ${(f)"$(_cca_profiles)"} ;;
       unbind)             _files -/ ;;
     esac
   elif (( CURRENT == 4 )) && [[ $words[2] == bind ]]; then
