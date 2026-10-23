@@ -239,6 +239,10 @@ npm run dist:all
 npm run release
 ```
 
+To publish a version whose installer has not been tried on its own platform
+yet, add `-- --prerelease`. GitHub then marks the release as not production
+ready; the tag and the assets are the same.
+
 Both platforms are unsigned. The Windows artifacts are cross-built from macOS.
 
 ## Tests

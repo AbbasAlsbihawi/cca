@@ -5,6 +5,17 @@ set -e
 cd "$(dirname "$0")/.."
 DESKTOP_DIR=$(pwd)
 
+# --prerelease marks the release as not production ready on GitHub. Use it while
+# an installer is still untested on its platform: the assets and tag are the same.
+PRERELEASE=
+while [ $# -gt 0 ]; do
+  case $1 in
+    --prerelease) PRERELEASE=1 ;;
+    *) echo "ERROR: unknown option '$1' (the only option is --prerelease)" >&2; exit 1 ;;
+  esac
+  shift
+done
+
 echo "==> [1/5] Reading version from package.json"
 V=$(node -p "require('./package.json').version")
 [ -n "$V" ] || { echo "ERROR: could not read version" >&2; exit 1; }
@@ -52,13 +63,18 @@ if [ "$MISSING" -ne 0 ]; then
   exit 1
 fi
 
-echo "==> [4/5] Committing, tagging and pushing"
+echo "==> [4/5] Tagging and pushing"
 git tag "v$V"
 git push origin main
 git push origin "v$V"
 
-echo "==> [5/5] Creating GitHub release v$V"
+if [ -n "$PRERELEASE" ]; then
+  echo "==> [5/5] Creating GitHub PRE-release v$V"
+else
+  echo "==> [5/5] Creating GitHub release v$V"
+fi
 set --
+[ -n "$PRERELEASE" ] && set -- --prerelease
 for f in $ASSETS; do
   set -- "$@" "release/$f"
 done
