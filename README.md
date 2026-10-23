@@ -138,7 +138,7 @@ Each desktop copy uses its own data folder, `~/.claude-accounts/desktop/<name>`.
 
 ## Desktop app
 
-"Claude Accounts" is one app for macOS and Windows that does the same things with buttons. Install it from [GitHub Releases](https://github.com/AbbasAlsbihawi/cca/releases): the `.dmg` on macOS, `ClaudeAccounts-Setup-<version>.exe` on Windows. It updates itself. Both builds are unsigned, so macOS and Windows may warn you the first time you open it.
+"Claude Accounts" is one app for macOS and Windows that does the same things with buttons. Install it from [GitHub Releases](https://github.com/AbbasAlsbihawi/cca/releases): the `.dmg` on macOS, `ClaudeAccounts-Setup-<version>.exe` on Windows. It updates itself. Neither build is signed with a paid developer certificate, so the first launch is blocked: on macOS open System Settings → Privacy & Security and choose *Open Anyway*; on Windows choose *More info* → *Run anyway*.
 
 The window lists your accounts. For each account you can:
 

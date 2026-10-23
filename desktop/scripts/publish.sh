@@ -16,12 +16,12 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-echo "==> [1/5] Reading version from package.json"
+echo "==> [1/6] Reading version from package.json"
 V=$(node -p "require('./package.json').version")
 [ -n "$V" ] || { echo "ERROR: could not read version" >&2; exit 1; }
 echo "    version $V (tag v$V)"
 
-echo "==> [2/5] Checking git state"
+echo "==> [2/6] Checking git state"
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 if [ "$BRANCH" != "main" ]; then
   echo "ERROR: must be on main, currently on '$BRANCH'" >&2
@@ -41,7 +41,7 @@ if [ -n "$(git ls-remote --tags origin "refs/tags/v$V")" ]; then
   exit 1
 fi
 
-echo "==> [3/5] Verifying release assets in $DESKTOP_DIR/release"
+echo "==> [3/6] Verifying release assets in $DESKTOP_DIR/release"
 ASSETS="ClaudeAccounts-$V-arm64-mac.dmg
 ClaudeAccounts-$V-x64-mac.dmg
 ClaudeAccounts-$V-arm64-mac.zip
@@ -63,15 +63,39 @@ if [ "$MISSING" -ne 0 ]; then
   exit 1
 fi
 
-echo "==> [4/5] Tagging and pushing"
+echo "==> [4/6] Verifying the macOS code signature"
+# The dmg and zip are packaged from these two bundles. macOS treats an app whose
+# signature does not seal its resources as damaged: it removes a downloaded copy
+# instead of opening it, which is how 0.1.0 to 0.1.2 shipped. Ad-hoc is what
+# build.mac.identity "-" asks for; any other signature means the build picked up a
+# certificate from this machine's keychain by accident, which must not be published.
+for app in "release/mac-arm64/Claude Accounts.app" "release/mac/Claude Accounts.app"; do
+  if [ ! -d "$app" ]; then
+    echo "ERROR: built app is missing: $app" >&2
+    exit 1
+  fi
+  if ! codesign --verify --deep --strict "$app" 2>/dev/null; then
+    echo "ERROR: $app fails codesign --verify --deep --strict" >&2
+    codesign --verify --deep --strict "$app" >&2 || true
+    exit 1
+  fi
+  if ! codesign -dv "$app" 2>&1 | grep -q '^Signature=adhoc'; then
+    echo "ERROR: $app is not ad-hoc signed; check build.mac.identity" >&2
+    codesign -dv "$app" 2>&1 | grep -E '^(Identifier|Signature|Sealed)' >&2 || true
+    exit 1
+  fi
+  echo "    ok       $app (ad-hoc, resources sealed)"
+done
+
+echo "==> [5/6] Tagging and pushing"
 git tag "v$V"
 git push origin main
 git push origin "v$V"
 
 if [ -n "$PRERELEASE" ]; then
-  echo "==> [5/5] Creating GitHub PRE-release v$V"
+  echo "==> [6/6] Creating GitHub PRE-release v$V"
 else
-  echo "==> [5/5] Creating GitHub release v$V"
+  echo "==> [6/6] Creating GitHub release v$V"
 fi
 set --
 [ -n "$PRERELEASE" ] && set -- --prerelease
