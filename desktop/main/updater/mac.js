@@ -322,8 +322,12 @@ async function checkForUpdates(win, send) {
     try {
       release = await getJson(RELEASE_URL);
     } catch (err) {
-      // Offline, rate limited, DNS down: not worth alarming anyone over.
-      send({ state: 'none', message: `Could not reach GitHub: ${(err && err.message) || 'network error'}` });
+      // A 404 is not a failure: GitHub's "latest" skips prereleases, so it means
+      // no full release is published yet and there is nothing to update to.
+      // Offline, rate limited, DNS down: not worth alarming anyone over either.
+      const why = String((err && err.message) || 'network error');
+      if (/HTTP 404/.test(why)) send({ state: 'none' });
+      else send({ state: 'none', message: `Could not reach GitHub: ${why}` });
       return;
     }
 
