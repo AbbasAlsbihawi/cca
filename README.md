@@ -27,6 +27,23 @@ To uninstall, run `./uninstall.sh`. This keeps your account data. To remove the 
 rm -rf ~/.claude-accounts
 ```
 
+## Windows
+
+`cca.ps1` is a PowerShell port (Windows PowerShell 5.1 or PowerShell 7). Install:
+
+```powershell
+git clone https://github.com/AbbasAlsbihawi/cca.git; cd cca; .\install.ps1
+```
+
+Open a new PowerShell window afterwards. If PowerShell blocks your profile, run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once. Uninstall with `.\uninstall.ps1`.
+
+The terminal commands work the same as on macOS: `add`, `login`, `use`, `bind`, `unbind`, `run`, `list`, `remove`, `backup`, `restore`, `autobackup` (a Task Scheduler job). Differences:
+
+- Shared files (`settings.json`, `skills`, ...) are linked with symlinks, falling back to junctions and hard links. Turn on Developer Mode in Windows settings for full symlink support.
+- `cca app <name>` makes a Start menu shortcut, with no icon colour. `cca open <name>` starts the desktop app with its own `--user-data-dir`. The app is looked for in the usual install folders; set `CCA_CLAUDE_EXE` to its `Claude.exe` if it is elsewhere. The desktop part is untested on a real install.
+- `cca import` is not available; `cca restore` also pulls sessions from the main Claude app.
+- Removed accounts go to the Recycle Bin.
+
 ## Quick start
 
 1. Name your current login first. Do this before you bind any folder.
