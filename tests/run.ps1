@@ -3,7 +3,7 @@
 # tests/run.sh, which covers the zsh side.
 #
 # Needs no Claude install and no account: every command here either fails on
-# purpose or works without one. Windows only, because cca.ps1 reaches for the
+# purpose, works without one, or runs against a stub `claude` the suite writes. Windows only, because cca.ps1 reaches for the
 # Claude app and Task Scheduler. CI runs it on windows-latest under Windows
 # PowerShell 5.1, the version cca.ps1 targets.
 #
@@ -81,6 +81,31 @@ function shim($argv) {
     } catch {
         return @{ Code = "threw: $($_.Exception.Message)"; Out = @() }
     }
+}
+
+# Puts a stub `claude` on PATH that prints what it was handed and exits with
+# $env:CCA_STUB_EXIT, so the tests below can watch whose exit code survives.
+# tests/run.sh stubs claude the same way on the zsh side.
+function stubclaude($dir) {
+    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    # Windows resolves claude.cmd through PATHEXT; a developer running this on
+    # macOS needs an executable file with no extension instead.
+    Set-Content -LiteralPath (Join-Path $dir 'claude.cmd') -Encoding ASCII -Value @(
+        '@echo off',
+        'if "%CCA_STUB_EXIT%"=="" set CCA_STUB_EXIT=0',
+        'echo CFG=%CLAUDE_CONFIG_DIR%',
+        'echo ARGS=%*',
+        'exit /b %CCA_STUB_EXIT%')
+    if ([Environment]::OSVersion.Platform -ne 'Win32NT') {
+        $sh = Join-Path $dir 'claude'
+        Set-Content -LiteralPath $sh -Encoding ASCII -Value @(
+            '#!/bin/sh',
+            'echo "CFG=$CLAUDE_CONFIG_DIR"',
+            'echo "ARGS=$*"',
+            'exit ${CCA_STUB_EXIT:-0}')
+        & chmod +x $sh
+    }
+    $env:PATH = $dir + [IO.Path]::PathSeparator + $env:PATH
 }
 
 # Every assertion the desktop app's reading of `cca list --json` rests on.
@@ -193,6 +218,40 @@ eq 'shim: cca restore on an unknown account exits non-zero' 1 $r.Code
 $r = shim @('list', '--json')
 eq 'shim: cca list --json exits 0' 0 $r.Code
 checkjson 'shim json' $r.Out
+
+# ---- whose exit code wins, against a stub claude ------------------------
+# `cca run` hands back the exit code of the tool it ran, while the logout that
+# `cca remove` runs on its way out has its code thrown away. Both are on
+# purpose, and neither could be reached without a claude to run.
+$box = newbox
+. $cca
+$oldpath = $env:PATH
+stubclaude (Join-Path $box 'bin')
+Copy-Item -LiteralPath $cca -Destination (Join-Path $env:CCA_HOME 'cca.ps1')
+# Make the account where cca.ps1 itself looks for it, whatever it joins with.
+$extra = Get-CcaDir 'extra'
+New-Item -ItemType Directory -Force -Path $extra | Out-Null
+
+$env:CCA_STUB_EXIT = '3'
+code 'cca run hands back the exit code of the tool' 3 { cca run extra a b }
+code 'and that code does not stick to the next command' 0 { cca list }
+$env:CCA_STUB_EXIT = '0'
+code 'cca run is 0 when the tool succeeds' 0 { cca run extra a b }
+
+$seen = (cca run extra a b 6>$null) -join "`n"
+has 'cca run points CLAUDE_CONFIG_DIR at the account' "CFG=$extra" $seen
+has 'cca run passes the arguments through' 'ARGS=a b' $seen
+
+$env:CCA_STUB_EXIT = '3'
+$r = shim @('run', 'extra', 'x')
+eq 'shim: cca run hands back the exit code of the tool' 3 $r.Code
+
+code 'cca remove ignores a logout that fails' 0 { cca remove extra }
+if (Test-Path -LiteralPath $extra) { bad 'cca remove moved the account out' 'the folder gone' 'still there' }
+else { ok 'cca remove moved the account out' }
+
+$env:PATH = $oldpath
+Remove-Item Env:\CCA_STUB_EXIT -ErrorAction SilentlyContinue
 
 foreach ($b in $script:boxes) { Remove-Item -LiteralPath $b -Recurse -Force -ErrorAction SilentlyContinue }
 
