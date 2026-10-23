@@ -83,10 +83,23 @@ async function init() {
   }
   if (window.cca.onChanged) window.cca.onChanged(() => refresh());
   if (window.cca.onUpdateStatus) {
-    window.cca.onUpdateStatus((s) => {
-      const t = s ? [s.state, s.version, s.message].filter(Boolean).join(' ') : '';
-      $('update-status').textContent = t;
-    });
+    // `state` is an internal name ('none', 'ready', ...); the user gets a sentence or
+    // nothing at all. `message` is kept only where it says something they can act on:
+    // the percentage while downloading, and the reason on an error or an arch mismatch.
+    // The toolbar already shows the running version, so it is not repeated here.
+    const updateText = (s) => {
+      if (!s || !s.state) return '';
+      const v = s.version ? ' ' + s.version : '';
+      switch (s.state) {
+        case 'available': return 'Update' + v + ' available';
+        case 'downloading': return 'Downloading update' + v + (s.message ? ' ' + s.message : '...');
+        case 'ready': return 'Update' + v + ' ready - restart to install';
+        case 'error': return s.message || 'Could not check for updates';
+        case 'checking': return '';
+        default: return s.message || '';
+      }
+    };
+    window.cca.onUpdateStatus((s) => { $('update-status').textContent = updateText(s); });
   }
   window.addEventListener('focus', () => { refresh(); schedule(); });
   window.addEventListener('blur', schedule);
