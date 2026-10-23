@@ -35,3 +35,10 @@ jobs:
         run: |
           .\tests\parse-ps1.ps1
           exit $LASTEXITCODE
+      # Runs real cca commands in a throwaway CCA_HOME: the only place anything
+      # actually executes cca.ps1 rather than just parsing it.
+      - name: Behavioural tests under Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          .\tests\run.ps1
+          exit $LASTEXITCODE
