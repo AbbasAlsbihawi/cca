@@ -7,9 +7,17 @@ jobs:
       - uses: actions/checkout@v4
       - run: zsh -n cca.zsh
       - run: zsh tests/run.sh
-      - name: Syntax-check cca.ps1
+      - name: Syntax-check every .ps1
+        shell: pwsh
         run: |
-          pwsh -NoProfile -Command '$e=$null; [void][System.Management.Automation.Language.Parser]::ParseFile("cca.ps1",[ref]$null,[ref]$e); if($e){$e|ForEach-Object{$_.Message}; exit 1}'
+          $bad = 0
+          foreach ($f in (Get-ChildItem -Recurse -File -Filter *.ps1)) {
+            if ($f.FullName -like '*node_modules*') { continue }
+            $e = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$null, [ref]$e)
+            if ($e) { $bad = 1; "--- $($f.FullName)"; $e | ForEach-Object { $_.Message } }
+          }
+          exit $bad
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
