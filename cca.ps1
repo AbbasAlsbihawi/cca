@@ -26,6 +26,18 @@ $script:CCA_SCRIPT = $MyInvocation.MyCommand.Path
 
 function Write-CcaErr([string]$msg) { [Console]::Error.WriteLine("cca: $msg") }
 
+# Set by a command that failed; `cca` and `claude` turn it into $LASTEXITCODE on the
+# way out. A PowerShell function returns its output stream, so a status cannot be
+# returned without printing it, and `exit` would close the shell that dot-sourced
+# this file. Write-CcaErr on its own stays a warning, the way cca.zsh prints some
+# errors without returning 1.
+$script:CCA_FAILED = $false
+
+function Set-CcaFailed { $script:CCA_FAILED = $true }
+
+# An error that fails the command: cca.zsh's `_cca_err "..."; return 1`.
+function Write-CcaFail([string]$msg) { Write-CcaErr $msg; $script:CCA_FAILED = $true }
+
 function Write-CcaFile([string]$path, [string]$text) {
     [IO.File]::WriteAllText($path, $text, (New-Object Text.UTF8Encoding($false)))
 }
@@ -103,7 +115,7 @@ function Resolve-CcaAccount {
 
 # Runs a script block with the account's CLAUDE_CONFIG_DIR set, then puts the variable back.
 function Invoke-CcaAs([string]$name, [scriptblock]$block) {
-    if (-not (Test-CcaExists $name)) { Write-CcaErr "no account '$name'. See: cca list"; return }
+    if (-not (Test-CcaExists $name)) { Write-CcaFail "no account '$name'. See: cca list"; return }
     $old = [Environment]::GetEnvironmentVariable('CLAUDE_CONFIG_DIR')
     $dir = Get-CcaDir $name
     [Environment]::SetEnvironmentVariable('CLAUDE_CONFIG_DIR', $dir)
@@ -112,7 +124,7 @@ function Invoke-CcaAs([string]$name, [scriptblock]$block) {
 
 function Get-CcaClaudeExe {
     $c = Get-Command claude -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
-    if (-not $c) { Write-CcaErr "the 'claude' command was not found. Install Claude Code first."; return $null }
+    if (-not $c) { Write-CcaFail "the 'claude' command was not found. Install Claude Code first."; return $null }
     $c.Source
 }
 
@@ -161,6 +173,7 @@ function Initialize-CcaConfig([string]$dir) {
 function New-CcaAccount([string]$name) {
     $dir = Join-Path $script:CCA_HOME "profiles\$name"
     New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    if (-not (Test-Path -LiteralPath $dir -PathType Container)) { Write-CcaFail "could not make $dir"; return }
     Sync-CcaShared $dir
     Initialize-CcaConfig $dir
 }
@@ -168,14 +181,15 @@ function New-CcaAccount([string]$name) {
 function Invoke-CcaAdd($a) {
     $name = if ($a.Count) { $a[0] } else { '' }
     if (-not (Test-CcaValid $name)) {
-        Write-CcaErr 'usage: cca add <name> [--email you@example.com] [--sso]  (name: a-z, 0-9, - and _)'
+        Write-CcaFail 'usage: cca add <name> [--email you@example.com] [--sso]  (name: a-z, 0-9, - and _)'
         return
     }
     if (Test-CcaExists $name) {
-        Write-CcaErr "account '$name' already exists. To log in again: cca login $name"
+        Write-CcaFail "account '$name' already exists. To log in again: cca login $name"
         return
     }
     New-CcaAccount $name
+    if ($script:CCA_FAILED) { return }
     Write-Host "Created account '$name'."
     Invoke-CcaLogin (@($name) + @($a | Select-Object -Skip 1))
 }
@@ -183,13 +197,16 @@ function Invoke-CcaAdd($a) {
 function Invoke-CcaLogin($a) {
     $name = if ($a.Count) { $a[0] } else { '' }
     if (-not (Test-CcaExists $name)) {
-        Write-CcaErr 'usage: cca login <name> [--email you@example.com] [--sso]'
+        Write-CcaFail 'usage: cca login <name> [--email you@example.com] [--sso]'
         Write-CcaErr ("accounts: " + ((Get-CcaProfiles) -join ', '))
         return
     }
     $dir = Get-CcaDir $name
     if ($dir) { Sync-CcaShared $dir }
+    # The safety backup must not fail the login; cca.zsh throws its status away too.
+    $failed = $script:CCA_FAILED
     try { Invoke-CcaBackup @('--quiet') | Out-Null } catch {}
+    $script:CCA_FAILED = $failed
     Write-Host "Signing in '$name'. If the browser is signed in to another Claude account, switch it there first."
     Invoke-CcaClaude $name (@('auth', 'login') + @($a | Select-Object -Skip 1))
 }
@@ -206,7 +223,7 @@ function Invoke-CcaUse($a) {
             Write-Host 'This terminal follows folder bindings again.'
         }
         default {
-            if (-not (Test-CcaExists $name)) { Write-CcaErr "no account '$name'. See: cca list"; return }
+            if (-not (Test-CcaExists $name)) { Write-CcaFail "no account '$name'. See: cca list"; return }
             $global:CCA_ACCOUNT = $name
             Write-Host "This terminal now uses: $name"
         }
@@ -215,10 +232,10 @@ function Invoke-CcaUse($a) {
 
 function Invoke-CcaBind($a) {
     $name = if ($a.Count) { $a[0] } else { '' }
-    if (-not $name) { Write-CcaErr 'usage: cca bind <name> [folder]'; return }
-    if (-not (Test-CcaExists $name)) { Write-CcaErr "no account '$name'. See: cca list"; return }
+    if (-not $name) { Write-CcaFail 'usage: cca bind <name> [folder]'; return }
+    if (-not (Test-CcaExists $name)) { Write-CcaFail "no account '$name'. See: cca list"; return }
     $dir = if ($a.Count -gt 1) { $a[1] } else { (Get-Location).ProviderPath }
-    if (-not (Test-Path -LiteralPath $dir -PathType Container)) { Write-CcaErr "not a folder: $dir"; return }
+    if (-not (Test-Path -LiteralPath $dir -PathType Container)) { Write-CcaFail "not a folder: $dir"; return }
     $dir = Get-CcaFullPath (Resolve-Path -LiteralPath $dir).ProviderPath
     $keep = @(Get-CcaBindings | Where-Object { (Get-CcaFullPath $_.Path) -ine $dir })
     $keep += [pscustomobject]@{ Path = $dir; Name = $name }
@@ -237,12 +254,12 @@ function Invoke-CcaUnbind($a) {
         return
     }
     $hit = Get-CcaBound $dir
-    if ($hit) { Write-CcaErr "$dir has no binding of its own; it follows $($hit.Path) ($($hit.Name))" }
-    else { Write-CcaErr "no binding on $dir" }
+    if ($hit) { Write-CcaFail "$dir has no binding of its own; it follows $($hit.Path) ($($hit.Name))" }
+    else { Write-CcaFail "no binding on $dir" }
 }
 
 function Invoke-CcaRun($a) {
-    if (-not $a.Count) { Write-CcaErr 'usage: cca run <name> [claude args...]'; return }
+    if (-not $a.Count) { Write-CcaFail 'usage: cca run <name> [claude args...]'; return }
     Invoke-CcaClaude $a[0] @($a | Select-Object -Skip 1)
 }
 
@@ -370,9 +387,9 @@ function Set-CcaFront([int]$procId) {
 
 function Invoke-CcaOpen($a) {
     $name = if ($a.Count) { $a[0] } else { '' }
-    if (-not (Test-CcaExists $name)) { Write-CcaErr ('usage: cca open <name>. Accounts: ' + ((Get-CcaProfiles) -join ', ')); return }
+    if (-not (Test-CcaExists $name)) { Write-CcaFail ('usage: cca open <name>. Accounts: ' + ((Get-CcaProfiles) -join ', ')); return }
     $exe = Get-CcaClaudeApp
-    if (-not $exe) { Write-CcaErr 'could not find the Claude desktop app. Set CCA_CLAUDE_EXE to its Claude.exe path.'; return }
+    if (-not $exe) { Write-CcaFail 'could not find the Claude desktop app. Set CCA_CLAUDE_EXE to its Claude.exe path.'; return }
     $procId = Get-CcaAppPid $name
     if ($procId) {
         if (-not (Set-CcaFront $procId)) { Write-CcaErr "'$name' is open but could not be brought to the front." }
@@ -381,6 +398,7 @@ function Invoke-CcaOpen($a) {
     $data = Get-CcaAppData $name
     if (-not $data) { Start-Process -FilePath $exe; return }
     New-Item -ItemType Directory -Force -Path $data | Out-Null
+    if (-not (Test-Path -LiteralPath $data -PathType Container)) { Write-CcaFail "could not make $data"; return }
     $old = [Environment]::GetEnvironmentVariable('CLAUDE_CONFIG_DIR')
     [Environment]::SetEnvironmentVariable('CLAUDE_CONFIG_DIR', (Join-Path $script:CCA_HOME "profiles\$name"))
     try { Start-Process -FilePath $exe -ArgumentList "--user-data-dir=`"$data`"" }
@@ -396,11 +414,11 @@ function Get-CcaLauncherPath([string]$name) {
 # Makes a Start Menu shortcut "Claude <Name>" that runs `cca open <name>`.
 function Invoke-CcaApp($a) {
     $name = if ($a.Count) { $a[0] } else { '' }
-    if (-not (Test-CcaValid $name)) { Write-CcaErr 'usage: cca app <name>'; return }
+    if (-not (Test-CcaValid $name)) { Write-CcaFail 'usage: cca app <name>'; return }
     if ($a.Count -gt 1) { Write-CcaErr 'colour tinting is not available on Windows; the plain Claude icon is used' }
     $exe = Get-CcaClaudeApp
-    if (-not $exe) { Write-CcaErr 'could not find the Claude desktop app. Set CCA_CLAUDE_EXE to its Claude.exe path.'; return }
-    if (-not (Test-CcaExists $name)) { New-CcaAccount $name }
+    if (-not $exe) { Write-CcaFail 'could not find the Claude desktop app. Set CCA_CLAUDE_EXE to its Claude.exe path.'; return }
+    if (-not (Test-CcaExists $name)) { New-CcaAccount $name; if ($script:CCA_FAILED) { return } }
     $lnk = Get-CcaLauncherPath $name
     New-Item -ItemType Directory -Force -Path (Split-Path $lnk) | Out-Null
     $sh = New-Object -ComObject WScript.Shell
@@ -440,16 +458,21 @@ function Move-CcaToTrash([string]$path) {
 
 function Invoke-CcaRemove($a) {
     $name = if ($a.Count) { $a[0] } else { '' }
-    if (-not (Test-CcaExists $name)) { Write-CcaErr ('usage: cca remove <name>. Accounts: ' + ((Get-CcaProfiles) -join ', ')); return }
+    if (-not (Test-CcaExists $name)) { Write-CcaFail ('usage: cca remove <name>. Accounts: ' + ((Get-CcaProfiles) -join ', ')); return }
     $default = Get-CcaDefaultName
     if ($name -cne $default) {
         $procId = Get-CcaAppPid $name
-        if ($procId) { Write-CcaErr "the Claude app for '$name' is open (PID $procId). Quit it first."; return }
+        if ($procId) { Write-CcaFail "the Claude app for '$name' is open (PID $procId). Quit it first."; return }
     }
+    # Neither the safety backup nor a logout that fails (already logged out) fails
+    # the removal; cca.zsh throws both statuses away as well.
+    $failed = $script:CCA_FAILED
     try { Invoke-CcaBackup @('--quiet') | Out-Null } catch {}
     $dir = Get-CcaDir $name
     $data = Get-CcaAppData $name
     try { Invoke-CcaClaude $name @('auth', 'logout') *> $null } catch {}
+    $script:CCA_FAILED = $failed
+    $global:LASTEXITCODE = 0
     Save-CcaBindings @(Get-CcaBindings | Where-Object { $_.Name -cne $name })
     $lnk = Get-CcaLauncherPath $name
     if (Test-Path -LiteralPath $lnk) { Move-CcaToTrash $lnk }
@@ -515,7 +538,7 @@ function Copy-CcaMissing([string]$from, [string]$to, [string]$kind, $c) {
 function Invoke-CcaBackup($a) {
     $arg = if ($a.Count) { $a[0] } else { '' }
     if ($arg -eq 'list') { Get-CcaSnapshots; return }
-    if ($arg -and $arg -ne '--quiet') { Write-CcaErr 'usage: cca backup [--quiet]  or  cca backup list'; return }
+    if ($arg -and $arg -ne '--quiet') { Write-CcaFail 'usage: cca backup [--quiet]  or  cca backup list'; return }
     $quiet = $arg -eq '--quiet'
     $keep = 30
     $envKeep = [Environment]::GetEnvironmentVariable('CCA_BACKUP_KEEP')
@@ -523,6 +546,7 @@ function Invoke-CcaBackup($a) {
     $root = Join-Path $script:CCA_HOME 'backups'
     $lock = Join-Path $root '.lock'
     New-Item -ItemType Directory -Force -Path $root | Out-Null
+    if (-not (Test-Path -LiteralPath $root -PathType Container)) { Write-CcaFail "could not make $root"; return }
     # One run at a time; a lock older than an hour is left over from a crash.
     try { New-Item -ItemType Directory -Path $lock -ErrorAction Stop | Out-Null }
     catch {
@@ -530,7 +554,7 @@ function Invoke-CcaBackup($a) {
             Remove-Item -LiteralPath $lock -Force -ErrorAction SilentlyContinue
         }
         try { New-Item -ItemType Directory -Path $lock -ErrorAction Stop | Out-Null }
-        catch { Write-CcaErr 'another backup is running'; return }
+        catch { Write-CcaFail 'another backup is running'; return }
     }
     try {
         $stamp = Get-Date -Format 'yyyy-MM-dd_HHmmss'
@@ -538,6 +562,7 @@ function Invoke-CcaBackup($a) {
         $n = 1
         while (Test-Path -LiteralPath $snap) { $n++; $snap = Join-Path $root "$stamp-$n" }
         New-Item -ItemType Directory -Path $snap | Out-Null
+        if (-not (Test-Path -LiteralPath $snap -PathType Container)) { Write-CcaFail "could not make $snap"; return }
         $accts = 0; $dirs = 0; $bad = 0
         foreach ($name in (Get-CcaProfiles)) {
             $d = Get-CcaDataDirs $name
@@ -566,6 +591,8 @@ function Invoke-CcaBackup($a) {
         $leaf = Split-Path $snap -Leaf
         Add-Content -LiteralPath (Join-Path $root 'backup.log') -Value ("{0} {1} accounts={2} folders={3} failed={4} pruned={5}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $leaf, $accts, $dirs, $bad, $old.Count)
         if (-not $quiet) { Write-Host "Backup ${leaf}: $accts accounts, $dirs folders. Keeping the newest $keep." }
+        # cca.zsh ends _cca_backup with `(( bad == 0 ))`: a folder it could not copy fails the backup.
+        if ($bad) { Set-CcaFailed }
     } finally {
         Remove-Item -LiteralPath $lock -Force -ErrorAction SilentlyContinue
     }
@@ -574,14 +601,14 @@ function Invoke-CcaBackup($a) {
 function Invoke-CcaRestore($a) {
     $name = if ($a.Count) { $a[0] } else { '' }
     $snapname = if ($a.Count -gt 1) { $a[1] } else { '' }
-    if (-not (Test-CcaExists $name)) { Write-CcaErr ('usage: cca restore <name> [snapshot]. Accounts: ' + ((Get-CcaProfiles) -join ', ')); return }
+    if (-not (Test-CcaExists $name)) { Write-CcaFail ('usage: cca restore <name> [snapshot]. Accounts: ' + ((Get-CcaProfiles) -join ', ')); return }
     $procId = Get-CcaAppPid $name
-    if ($procId) { Write-CcaErr "the Claude app for '$name' is open (PID $procId). Quit it first."; return }
+    if ($procId) { Write-CcaFail "the Claude app for '$name' is open (PID $procId). Quit it first."; return }
     $d = Get-CcaDataDirs $name
     $root = Join-Path $script:CCA_HOME 'backups'
     if ($snapname) {
         if ($snapname -notmatch '^\d{4}-\d{2}-\d{2}_\d{6}(-\d+)?$' -or -not (Test-Path -LiteralPath (Join-Path $root "$snapname\$name"))) {
-            Write-CcaErr "snapshot '$snapname' has nothing for '$name'. See: cca backup list"
+            Write-CcaFail "snapshot '$snapname' has nothing for '$name'. See: cca backup list"
             return
         }
     } else {
@@ -598,7 +625,7 @@ function Invoke-CcaRestore($a) {
         }
     }
     if (-not $snapname -and -not $src) {
-        Write-CcaErr "no backup has '$name', and the main Claude app has none of its sessions. See: cca backup list"
+        Write-CcaFail "no backup has '$name', and the main Claude app has none of its sessions. See: cca backup list"
         return
     }
     $c = @{ sess = 0; tr = 0; bad = 0 }
@@ -608,7 +635,9 @@ function Invoke-CcaRestore($a) {
         Copy-CcaMissing (Join-Path $root "$snapname\$name\claude-code-sessions") $d.Sessions 'sess' $c
     }
     if ($src) {
-        New-Item -ItemType Directory -Force -Path (Join-Path $script:CCA_HOME "desktop\$name") | Out-Null
+        $desk = Join-Path $script:CCA_HOME "desktop\$name"
+        New-Item -ItemType Directory -Force -Path $desk | Out-Null
+        if (-not (Test-Path -LiteralPath $desk -PathType Container)) { Write-CcaFail "could not make $desk"; return }
         Copy-CcaMissing $src (Join-Path $d.Sessions $acct) 'sess' $c
         # The transcripts those sessions point to.
         $from = Join-Path $script:CCA_MAIN_DIR 'projects'
@@ -641,6 +670,8 @@ function Invoke-CcaRestore($a) {
     $from = if ($snapname) { $snapname } else { 'the main Claude app' }
     if ($snapname -and $src) { $from += ' and the main Claude app' }
     Write-Host "Restored '$name' from ${from}: $($c.sess) sessions, $($c.tr) transcripts, $tomb deleted marks moved to the Recycle Bin. Nothing was overwritten."
+    # cca.zsh ends _cca_restore with `(( bad == 0 ))`.
+    if ($c.bad) { Set-CcaFailed }
 }
 
 # A daily backup at 13:00 as a Task Scheduler job.
@@ -656,7 +687,7 @@ function Invoke-CcaAutobackup($a) {
             $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable
             try {
                 Register-ScheduledTask -TaskName $task -Action $action -Trigger $trigger -Settings $settings -Force -ErrorAction Stop | Out-Null
-            } catch { Write-CcaErr "Task Scheduler could not create the job: $($_.Exception.Message)"; return }
+            } catch { Write-CcaFail "Task Scheduler could not create the job: $($_.Exception.Message)"; return }
             Write-Host 'Autobackup on: every day at 13:00 (a missed run happens at the next start).'
         }
         'off' {
@@ -668,7 +699,7 @@ function Invoke-CcaAutobackup($a) {
             $newest = @(Get-CcaSnapshots) | Select-Object -First 1
             Write-Host ("Autobackup: {0}. Newest backup: {1}" -f $(if ($on) { 'on' } else { 'off' }), $(if ($newest) { $newest } else { 'none' }))
         }
-        default { Write-CcaErr 'usage: cca autobackup on|off|status' }
+        default { Write-CcaFail 'usage: cca autobackup on|off|status' }
     }
 }
 
@@ -699,6 +730,11 @@ Set CCA_QUIET=1 to hide the line 'claude' prints about the account.
 function cca {
     $cmd = if ($args.Count) { [string]$args[0] } else { 'status' }
     $rest = @($args | Select-Object -Skip 1)
+    # $LASTEXITCODE is the status callers read, desktop/main/cca-shim.ps1 among them
+    # (it exits with it). Starting at 0 keeps a stale code from an earlier command
+    # out; a native command a cca command runs (claude) leaves its own code here.
+    $script:CCA_FAILED = $false
+    $global:LASTEXITCODE = 0
     switch ($cmd) {
         'status'  { Show-CcaStatus }
         { $_ -in 'list', 'ls' } { if ($rest.Count -and $rest[0] -ceq '--json') { Show-CcaListJson } else { Show-CcaList } }
@@ -711,32 +747,40 @@ function cca {
         'app'     { Invoke-CcaApp $rest }
         'open'    { Invoke-CcaOpen $rest }
         { $_ -in 'remove', 'rm' } { Invoke-CcaRemove $rest }
-        'import'  { Write-CcaErr "'import' is not available on Windows yet. Use: cca restore <name>" }
+        'import'  { Write-CcaFail "'import' is not available on Windows yet. Use: cca restore <name>" }
         'backup'  { Invoke-CcaBackup $rest }
         'restore' { Invoke-CcaRestore $rest }
         'autobackup' { Invoke-CcaAutobackup $rest }
         { $_ -in 'help', '-h', '--help' } { Show-CcaHelp }
-        default   { Write-CcaErr "unknown command '$cmd'"; Show-CcaHelp }
+        default   { Write-CcaFail "unknown command '$cmd'"; Show-CcaHelp }
     }
+    if ($script:CCA_FAILED) { $global:LASTEXITCODE = 1 }
 }
 
 # Wraps `claude` so it runs with the account chosen for this folder or terminal.
 function claude {
-    $exe = Get-CcaClaudeExe
-    if (-not $exe) { return }
-    # Inside Claude Code, keep the account the parent session runs on.
-    if ($env:CLAUDECODE) { & $exe @args; return }
-    $r = Resolve-CcaAccount
-    if (-not (Test-CcaExists $r.Name)) {
-        Write-CcaErr "account '$($r.Name)' ($($r.Why)) does not exist. See: cca list"
-        return
+    $script:CCA_FAILED = $false
+    $global:LASTEXITCODE = 0
+    # try/finally so the early returns below set the status too.
+    try {
+        $exe = Get-CcaClaudeExe
+        if (-not $exe) { return }
+        # Inside Claude Code, keep the account the parent session runs on.
+        if ($env:CLAUDECODE) { & $exe @args; return }
+        $r = Resolve-CcaAccount
+        if (-not (Test-CcaExists $r.Name)) {
+            Write-CcaFail "account '$($r.Name)' ($($r.Why)) does not exist. See: cca list"
+            return
+        }
+        if (-not $env:CCA_QUIET -and -not [Console]::IsErrorRedirected) {
+            [Console]::Error.WriteLine("$([char]27)[2mclaude account: $($r.Name) ($($r.Why))$([char]27)[0m")
+        }
+        $claudeArgs = $args
+        $block = { & $exe @claudeArgs }.GetNewClosure()
+        Invoke-CcaAs $r.Name $block
+    } finally {
+        if ($script:CCA_FAILED) { $global:LASTEXITCODE = 1 }
     }
-    if (-not $env:CCA_QUIET -and -not [Console]::IsErrorRedirected) {
-        [Console]::Error.WriteLine("$([char]27)[2mclaude account: $($r.Name) ($($r.Why))$([char]27)[0m")
-    }
-    $claudeArgs = $args
-    $block = { & $exe @claudeArgs }.GetNewClosure()
-    Invoke-CcaAs $r.Name $block
 }
 
 Register-ArgumentCompleter -CommandName cca -ScriptBlock {
