@@ -31,12 +31,14 @@ for app in "$HOME"/Applications/*.app; do
   fi
 done
 
-# The Mac app, only if it is ours.
-app="$HOME/Applications/Claude Accounts.app"
-if [ -d "$app" ] && [ "$(defaults read "$app/Contents/Info" CFBundleIdentifier 2>/dev/null)" = "dev.cca.accounts" ]; then
-  rm -rf "$app"
-  echo "Removed $app"
-fi
+# The desktop app, only if it is ours. /Applications is where the dmg puts it;
+# ~/Applications is where the retired Swift app installed itself.
+for app in "/Applications/Claude Accounts.app" "$HOME/Applications/Claude Accounts.app"; do
+  if [ -d "$app" ] && [ "$(defaults read "$app/Contents/Info" CFBundleIdentifier 2>/dev/null)" = "dev.cca.accounts" ]; then
+    rm -rf "$app"
+    echo "Removed $app"
+  fi
+done
 
 cat <<'MSG'
 

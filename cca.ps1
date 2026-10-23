@@ -285,6 +285,39 @@ function Show-CcaList {
     }
 }
 
+# Everything `cca list --json` reports, as one JSON object (same shape as cca.zsh).
+# On Windows `color` is always null and `colors` is [] (the app icon cannot be tinted).
+function Show-CcaListJson {
+    $default = Get-CcaDefaultName
+    $binds = @(Get-CcaBindings)
+    $accts = @()
+    foreach ($name in (Get-CcaProfiles)) {
+        $e = Get-CcaEmail $name
+        $email = if ($e) { [string]$e.Email } else { $null }
+        $org = if ($e -and $e.Org) { [string]$e.Org } else { $null }
+        $app = Get-CcaLauncherPath $name
+        if (-not (Test-Path -LiteralPath $app)) { $app = $null }
+        $running = $false
+        try { if ($null -ne (Get-CcaAppPid $name 2>$null)) { $running = $true } } catch {}
+        $folders = @($binds | Where-Object { $_.Name -ceq $name } | ForEach-Object { [string]$_.Path })
+        $accts += [ordered]@{
+            name = [string]$name; isDefault = ($name -ceq $default)
+            email = $email; org = $org; loggedIn = [bool]$email
+            color = $null; app = $app
+            running = $running; folders = $folders
+        }
+    }
+    $auto = $false
+    try { $auto = [bool](Get-ScheduledTask -TaskName 'cca-backup' -ErrorAction SilentlyContinue) } catch {}
+    $doc = [ordered]@{
+        version = 1; default = [string]$default; colors = @()
+        autobackup = $auto; snapshots = @(Get-CcaSnapshots | ForEach-Object { [string]$_ }); accounts = $accts
+    }
+    $json = ConvertTo-Json -InputObject $doc -Depth 6 -Compress
+    # Plain ASCII on stdout whatever the console code page is.
+    [regex]::Replace($json, '[^\x00-\x7F]', { param($m) '\u{0:x4}' -f [int][char]$m.Value })
+}
+
 function Show-CcaStatus {
     $r = Resolve-CcaAccount
     Write-Host "Here: $($r.Name)  ($($r.Why))"
@@ -681,7 +714,7 @@ cca - switch Claude Code between accounts (Windows)
   cca bind <name> [folder]   always use an account in a folder and its subfolders
   cca unbind [folder]        remove a folder binding
   cca run <name> [args]      run claude once with an account
-  cca list                   list accounts with their emails
+  cca list [--json]          list accounts with their emails (--json: for scripts and the desktop app)
   cca app <name>             make a 'Claude <Name>' Start menu shortcut for the desktop app
   cca open <name>            open the Claude desktop app for an account (or bring it to the front)
   cca remove <name>          log out an account; move its folders and launcher to the Recycle Bin
@@ -704,7 +737,7 @@ function cca {
     $global:LASTEXITCODE = 0
     switch ($cmd) {
         'status'  { Show-CcaStatus }
-        { $_ -in 'list', 'ls' } { Show-CcaList }
+        { $_ -in 'list', 'ls' } { if ($rest.Count -and $rest[0] -ceq '--json') { Show-CcaListJson } else { Show-CcaList } }
         'add'     { Invoke-CcaAdd $rest }
         'login'   { Invoke-CcaLogin $rest }
         'use'     { Invoke-CcaUse $rest }
@@ -757,6 +790,7 @@ Register-ArgumentCompleter -CommandName cca -ScriptBlock {
     $cmds = 'status', 'list', 'add', 'login', 'use', 'bind', 'unbind', 'run', 'app', 'open', 'remove', 'backup', 'restore', 'autobackup', 'help'
     $pick = if ($pos -le 1) { $cmds }
         elseif ($pos -eq 2 -and $words[1] -in 'login', 'use', 'bind', 'run', 'app', 'open', 'remove', 'restore') { Get-CcaProfiles }
+        elseif ($pos -eq 2 -and $words[1] -in 'list', 'ls') { '--json' }
         elseif ($pos -eq 2 -and $words[1] -eq 'backup') { 'list', '--quiet' }
         elseif ($pos -eq 2 -and $words[1] -eq 'autobackup') { 'on', 'off', 'status' }
         elseif ($pos -eq 3 -and $words[1] -eq 'restore') { Get-CcaSnapshots }

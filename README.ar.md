@@ -75,7 +75,7 @@ rm -rf ~/.claude-accounts
 | `cca bind <name> [folder]` | يستخدم حساباً دائماً في مجلد وفي مجلداته الفرعية |
 | `cca unbind [folder]` | يزيل ربط مجلد |
 | `cca run <name> [args]` | يشغّل claude مرة واحدة بحساب |
-| `cca list [--json]` | يعرض الحسابات مع بريدها الإلكتروني (`--json`: للسكربتات ولتطبيق Mac) |
+| `cca list [--json]` | يعرض الحسابات مع بريدها الإلكتروني (`--json`: للسكربتات ولتطبيق سطح المكتب) |
 | `cca app <name> [color]` | ينشئ تطبيق 'Claude <Name>' في ~/Applications لذلك الحساب، بأيقونة ملونة |
 | `cca open <name>` | يفتح تطبيق Claude لحساب (أو يعرضه في المقدمة إن كان مفتوحاً) |
 | `cca remove <name>` | يسجّل خروج الحساب، وينقل مجلداته ومشغِّله إلى سلة المهملات |
@@ -95,7 +95,7 @@ rm -rf ~/.claude-accounts
 
 يطبع `claude` سطراً باهتاً، `claude account: ...`، قبل أن يبدأ. اضبط `CCA_QUIET=1` لإخفائه.
 
-## تطبيق سطح المكتب
+## تطبيق Claude لكل حساب
 
 ```sh
 cca app personal
@@ -119,15 +119,9 @@ cca app personal
 
 لكل نسخة سطح مكتب مجلد بيانات خاص بها، وهو `~/.claude-accounts/desktop/<name>`. وتبويب Code فيها يستخدم مجلد إعدادات ذلك الحساب.
 
-## تطبيق Mac
+## تطبيق سطح المكتب
 
-"Claude Accounts" تطبيق صغير لنظام Mac يفعل الأشياء نفسها بالأزرار. ابنِه وثبّته:
-
-```sh
-app/build.sh --install
-```
-
-يفعل `./install.sh` ذلك عنك إذا كان `swiftc` مثبتاً. يُوضع التطبيق في `~/Applications/Claude Accounts.app`.
+"Claude Accounts" تطبيق واحد لنظامي macOS وWindows يفعل الأشياء نفسها بالأزرار. ثبّته من [GitHub Releases](https://github.com/AbbasAlsbihawi/cca/releases): ملف `.dmg` على macOS، وملف `ClaudeAccounts-Setup-<version>.exe` على Windows. يحدّث التطبيق نفسه تلقائياً. النسختان غير موقّعتين، فقد يحذّرك macOS أو Windows عند فتحه أول مرة.
 
 تعرض النافذة حساباتك. لكل حساب يمكنك:
 
@@ -141,11 +135,7 @@ app/build.sh --install
 
 وللحسابات كلها يمكنك إضافة حساب، وأخذ نسخة احتياطية الآن، وتشغيل النسخ الاحتياطي اليومي أو إيقافه، ومشاهدة النسخ المحفوظة.
 
-للتطبيق أيضاً أيقونة في شريط القوائم. تبقى هناك عند إغلاق النافذة.
-
-الإضافة وتسجيل الدخول من جديد وNew Terminal تفتح Terminal.app.
-
-يستدعي التطبيق `cca`، فيتفق ما تراه في الطرفية وفي التطبيق دائماً. يطبع `cca list --json` الحسابات والمجلدات والنسخ المحفوظة بصيغة JSON، وهذا ما يقرؤه التطبيق.
+يستدعي التطبيق `cca`، فيتفق ما تراه في الطرفية وفي التطبيق دائماً. ثبّت `cca` أولاً بـ `./install.sh` (و`.\install.ps1` على Windows). يطبع `cca list --json` الحسابات والمجلدات والنسخ المحفوظة بصيغة JSON، وهذا ما يقرؤه التطبيق.
 
 ## كيف يعمل
 
@@ -170,7 +160,6 @@ app/build.sh --install
 - `~/.claude-accounts/desktop/<name>/`: مجلد بيانات كل نسخة سطح مكتب
 - `~/.claude-accounts/backups/`: النسخ الاحتياطية
 - `~/Applications/Claude <Name>.app`: مشغِّلات سطح المكتب
-- `~/Applications/Claude Accounts.app`: تطبيق Mac (المصدر في `app/`، ويُبنى في `app/build/`)
 - سطر واحد في `~/.zshrc` يحمّل `cca.zsh`
 
 ## النسخ الاحتياطي
@@ -221,6 +210,22 @@ cca remove personal
 - نسخة سطح المكتب تعرض الحساب الخطأ: أغلق كل نسخ Claude، وافتح تلك فقط، ثم سجّل الخروج، ثم سجّل الدخول.
 - تسجيل الدخول يختار حساب Google الخطأ: اكتب البريد الإلكتروني واستخدم "Continue with email" بدلاً من "Continue with Google".
 - الطرفية تستخدم الحساب الخطأ: شغّل `cca login <name>`.
+
+## الإصدار
+
+للمشرفين على المشروع. تُنشأ الإصدارات محلياً؛ لا يوجد إصدار عبر CI.
+
+```sh
+cd desktop && npm install
+npm version patch --no-git-tag-version
+npm run dist:all
+npm run release
+```
+
+ولإصدار نسخة لم يُجرَّب مثبّتها بعد على نظامها، أضِف `-- --prerelease`، فيضع
+GitHub على الإصدار علامة أنه غير جاهز للإنتاج، بالوسم والملفات نفسها.
+
+النسختان غير موقّعتين. وملفات Windows تُبنى من macOS (cross-build).
 
 ## الاختبارات
 
