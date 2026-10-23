@@ -29,11 +29,6 @@ else
   echo "Added cca to $rc (backup: $bak)"
 fi
 
-# The Mac app needs the Swift compiler. A failed build never fails the install.
-if xcode-select -p >/dev/null 2>&1 && xcrun --find swiftc >/dev/null 2>&1; then
-  zsh "$here/app/build.sh" --install || echo "warning: could not build the Mac app; cca itself is installed" >&2
-fi
-
 cat <<'MSG'
 
 Next steps:
@@ -41,4 +36,7 @@ Next steps:
   2. Name your current account before binding folders:
        echo work > ~/.claude-accounts/default-name
   3. Run: cca help
+
+Desktop app (macOS and Windows, with automatic updates):
+  download the .dmg from https://github.com/AbbasAlsbihawi/cca/releases
 MSG

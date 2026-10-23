@@ -44,4 +44,7 @@ Next steps:
   2. Name your current account before binding folders:
        Set-Content "$HOME\.claude-accounts\default-name" work
   3. Run: cca help
+
+Desktop app (macOS and Windows, with automatic updates):
+  download ClaudeAccounts-Setup-<version>.exe from https://github.com/AbbasAlsbihawi/cca/releases
 '@

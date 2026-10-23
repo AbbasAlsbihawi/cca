@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'">
+<meta name="color-scheme" content="dark light">
+<title>Claude Accounts</title>
+<link rel="stylesheet" href="styles.css">
+<script type="module" src="app.js"></script>
+</head>
+<body>
+<header id="toolbar">
+  <button id="btn-add">Add account</button>
+  <button id="btn-backup">Backup</button>
+  <label class="toggle"><input type="checkbox" id="chk-autobackup"> Autobackup</label>
+  <button id="btn-refresh">Refresh</button>
+  <span class="spacer"></span>
+  <span id="update-status" class="muted"></span>
+  <span id="app-version" class="muted"></span>
+</header>
+<main id="panes">
+  <nav id="sidebar" aria-label="Accounts"></nav>
+  <section id="detail"></section>
+</main>
+<section id="output-panel" class="collapsed">
+  <div id="output-bar">
+    <button id="output-toggle" class="link">Output</button>
+    <span class="spacer"></span>
+    <button id="output-clear" class="link">Clear</button>
+  </div>
+  <pre id="output-log"></pre>
+</section>
+<div id="sheet-backdrop" hidden><div id="sheet" role="dialog" aria-modal="true"></div></div>
+</body>
+</html>

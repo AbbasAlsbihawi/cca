@@ -92,7 +92,7 @@ The terminal commands work the same as on macOS: `add`, `login`, `use`, `bind`, 
 | `cca bind <name> [folder]` | always use an account in a folder and its subfolders |
 | `cca unbind [folder]` | remove a folder binding |
 | `cca run <name> [args]` | run claude once with an account |
-| `cca list [--json]` | list accounts with their emails (`--json`: for scripts and the Mac app) |
+| `cca list [--json]` | list accounts with their emails (`--json`: for scripts and the desktop app) |
 | `cca app <name> [color]` | make a 'Claude <Name>' app in ~/Applications for that account, with a coloured icon |
 | `cca open <name>` | open the Claude app for an account (or bring it to the front) |
 | `cca remove <name>` | log out an account; move its folders and launcher to the Trash |
@@ -112,7 +112,7 @@ Inside a Claude Code session, `claude` keeps the account of that session.
 
 `claude` prints a dim line, `claude account: ...`, before it starts. Set `CCA_QUIET=1` to hide it.
 
-## Desktop app
+## Claude app per account
 
 ```sh
 cca app personal
@@ -136,15 +136,9 @@ macOS asks once for permission to let the launcher control System Events. Allow 
 
 Each desktop copy uses its own data folder, `~/.claude-accounts/desktop/<name>`. Its Code tab uses the config folder of that account.
 
-## Mac app
+## Desktop app
 
-"Claude Accounts" is a small Mac app that does the same things with buttons. Build and install it:
-
-```sh
-app/build.sh --install
-```
-
-`./install.sh` does this for you when `swiftc` is installed. The app goes to `~/Applications/Claude Accounts.app`.
+"Claude Accounts" is one app for macOS and Windows that does the same things with buttons. Install it from [GitHub Releases](https://github.com/AbbasAlsbihawi/cca/releases): the `.dmg` on macOS, `ClaudeAccounts-Setup-<version>.exe` on Windows. It updates itself. Both builds are unsigned, so macOS and Windows may warn you the first time you open it.
 
 The window lists your accounts. For each account you can:
 
@@ -158,11 +152,7 @@ The window lists your accounts. For each account you can:
 
 For all accounts you can add an account, take a backup now, turn the daily autobackup on or off, and see the snapshots.
 
-The app also has a menu bar icon. It stays there when you close the window.
-
-Add, log in again and New Terminal open Terminal.app.
-
-The app calls `cca`, so the terminal and the app always agree. `cca list --json` prints the accounts, folders and snapshots as JSON, which is what the app reads.
+The app calls `cca`, so the terminal and the app always agree. Install `cca` first with `./install.sh` (`.\install.ps1` on Windows). `cca list --json` prints the accounts, folders and snapshots as JSON, which is what the app reads.
 
 ## How it works
 
@@ -187,7 +177,6 @@ These stay separate for each account:
 - `~/.claude-accounts/desktop/<name>/`: data folder of each desktop copy
 - `~/.claude-accounts/backups/`: backup snapshots
 - `~/Applications/Claude <Name>.app`: desktop launchers
-- `~/Applications/Claude Accounts.app`: the Mac app (source in `app/`, built to `app/build/`)
 - one line in `~/.zshrc` that loads `cca.zsh`
 
 ## Backups
@@ -238,6 +227,19 @@ This logs the account out, drops its folder bindings, and moves its config folde
 - A desktop copy shows the wrong account: quit all Claude copies, open only that one, log out, then log in.
 - Signing in picks the wrong Google account: type the email and use "Continue with email" instead of "Continue with Google".
 - The terminal uses the wrong account: run `cca login <name>`.
+
+## Releasing
+
+For maintainers. Releases are cut locally; there is no CI release.
+
+```sh
+cd desktop && npm install
+npm version patch --no-git-tag-version
+npm run dist:all
+npm run release
+```
+
+Both platforms are unsigned. The Windows artifacts are cross-built from macOS.
 
 ## Tests
 
