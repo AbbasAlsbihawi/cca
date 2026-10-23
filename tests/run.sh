@@ -403,5 +403,67 @@ prof extra
 out=$(run "$CTX"$'\n''cca login extra')
 eq "login triggers a backup" 1 "$(ls $BK | grep -cE '^[0-9]{4}-')"
 
+# 21. cca list --json
+mk_home; prof personal; prof other
+LA=$H/Library/LaunchAgents
+JR=$H/Applications/Claude\ Personal.app/Contents/Resources
+mkdir -p $JR
+print -r -- personal > $JR/cca-account
+print -r -- purple > $JR/cca-color
+mkdir -p "$H/Applications/Claude Other.app/Contents/Resources"   # not made by cca: no marker
+print -r -- nocolor > "$H/Applications/Claude Other.app/Contents/Resources/cca-color"
+ODD=$T/work/'we"ird \ عx'
+mkdir -p $ODD $T/work/plain
+export ODD
+jq -n --arg e 'q"u\ote@x.com' '{oauthAccount:{emailAddress:$e,organizationName:"Org"}}' > $A/profiles/personal/.claude.json
+run 'cca bind personal "$ODD"; cca bind personal $T/work/plain' >/dev/null
+mkdir -p $A/backups/2026-01-01_000000 $A/backups/2026-03-05_101010 $A/backups/2026-03-05_101010-2
+JSTUBS='ps() { print -r -- " 111 /Applications/Claude.app/Contents/MacOS/Claude"; print -r -- " 222 /Applications/Claude.app/Contents/MacOS/Claude --user-data-dir=$CCA_HOME/desktop/personal"; }'
+jrun() { env -u CLAUDECODE HOME=$H PATH=$T/bin:$PATH REPO=$REPO T=$T zsh -f -c 'source "$REPO/cca.zsh"; '"$JSTUBS"$'\n'"$1" 2>$T/jerr; }
+J=$(jrun 'cca list --json'); rc=$?
+yes "list --json exits 0" $rc
+eq "list --json: nothing on stderr" "" "$(<$T/jerr)"
+print -r -- $J | jq -e . >/dev/null 2>&1; yes "list --json: output parses" $?
+eq "list --json: one line" 1 "$(print -r -- $J | wc -l | tr -d ' ')"
+jf() { print -r -- $J | jq -r "$1" }
+eq "json: version" 1 "$(jf .version)"
+eq "json: default" work "$(jf .default)"
+eq "json: colors" "red orange yellow green teal blue purple pink gray" "$(jf '.colors | join(" ")')"
+eq "json: accounts in profile order" "work other personal" "$(jf '[.accounts[].name] | join(" ")')"
+eq "json: isDefault" "true false false" "$(jf '[.accounts[].isDefault] | join(" ")')"
+eq "json: default email" main@co.com "$(jf '.accounts[0].email')"
+eq "json: default org" Co "$(jf '.accounts[0].org')"
+eq "json: null email when not logged in" null "$(jf '.accounts[1].email | tojson')"
+eq "json: loggedIn" "true false true" "$(jf '[.accounts[].loggedIn] | join(" ")')"
+eq "json: email with quote and backslash round-trips" 'q"u\ote@x.com' "$(jf '.accounts[2].email')"
+eq "json: color" "null null purple" "$(jf '[.accounts[].color | tojson] | map(sub("\""; ""; "g")) | join(" ")')"
+eq "json: app path only for a cca launcher" "null null $H/Applications/Claude Personal.app" "$(jf '[.accounts[].app | tojson] | map(sub("\""; ""; "g")) | join(" ")')"
+eq "json: running" "true false true" "$(jf '[.accounts[].running] | join(" ")')"
+eq "json: folders keep the odd path and bindings order" "$ODD"$'\n'"$T/work/plain" "$(jf '.accounts[2].folders[]')"
+eq "json: folders empty array" "[]" "$(jf '.accounts[0].folders | tojson')"
+eq "json: snapshots newest first" "2026-03-05_101010-2 2026-03-05_101010 2026-01-01_000000" "$(jf '.snapshots | join(" ")')"
+eq "json: autobackup off" false "$(jf .autobackup)"
+mkdir -p $LA; touch $LA/dev.cca.backup.plist
+eq "json: autobackup on when the plist exists" true "$(jrun 'cca list --json' | jq -r .autobackup)"
+rm -f $LA/dev.cca.backup.plist
+eq "json: autobackup off again" false "$(jrun 'cca list --json' | jq -r .autobackup)"
+eq "ls --json matches list --json" "$J" "$(jrun 'cca ls --json')"
+eq "list stays plain without --json" \
+  "$(printf '%s %-14s %s\n' '*' work 'main@co.com  (Co)' ' ' other 'not logged in' ' ' personal 'q"u\ote@x.com  (Org)')" \
+  "$(jrun 'cca list')"
+eq "json: _cca_jstr escapes" \
+  "$(print -rl -- '"a\tb\u0001\"\\"' '"x\r\ny\u001f"' '"عx"' null)" \
+  "$(run "$(cat <<'EOF'
+_cca_jstr $'a\tb\x01"\\'
+_cca_jstr $'x\r\ny\x1f'
+_cca_jstr 'عx'
+_cca_jstr ''
+EOF
+)")"
+out=$(run 'cca list --json | jq -e . >/dev/null; echo $?; cca use personal >/dev/null; print -r -- $CCA_ACCOUNT')
+eq "cca use sets CCA_ACCOUNT" $'0\npersonal' "$out"
+eq "CCA_ACCOUNT picks the account (the app's New Terminal)" "CFG=$A/profiles/personal ARGS=x" "$(run '( export CCA_ACCOUNT=personal; claude x )')"
+unset ODD
+
 print -r -- "$pass passed, $fail failed"
 (( fail == 0 ))

@@ -75,7 +75,7 @@ rm -rf ~/.claude-accounts
 | `cca bind <name> [folder]` | always use an account in a folder and its subfolders |
 | `cca unbind [folder]` | remove a folder binding |
 | `cca run <name> [args]` | run claude once with an account |
-| `cca list` | list accounts with their emails |
+| `cca list [--json]` | list accounts with their emails (`--json`: for scripts and the Mac app) |
 | `cca app <name> [color]` | make a 'Claude <Name>' app in ~/Applications for that account, with a coloured icon |
 | `cca open <name>` | open the Claude app for an account (or bring it to the front) |
 | `cca remove <name>` | log out an account; move its folders and launcher to the Trash |
@@ -119,6 +119,34 @@ macOS asks once for permission to let the launcher control System Events. Allow 
 
 Each desktop copy uses its own data folder, `~/.claude-accounts/desktop/<name>`. Its Code tab uses the config folder of that account.
 
+## Mac app
+
+"Claude Accounts" is a small Mac app that does the same things with buttons. Build and install it:
+
+```sh
+app/build.sh --install
+```
+
+`./install.sh` does this for you when `swiftc` is installed. The app goes to `~/Applications/Claude Accounts.app`.
+
+The window lists your accounts. For each account you can:
+
+- open its Claude app, or make the app
+- pick a colour for its icon
+- open a New Terminal that uses the account
+- log in again
+- restore conversations, with a preview first
+- remove the account, after a confirm
+- bind and unbind folders
+
+For all accounts you can add an account, take a backup now, turn the daily autobackup on or off, and see the snapshots.
+
+The app also has a menu bar icon. It stays there when you close the window.
+
+Add, log in again and New Terminal open Terminal.app.
+
+The app calls `cca`, so the terminal and the app always agree. `cca list --json` prints the accounts, folders and snapshots as JSON, which is what the app reads.
+
 ## How it works
 
 Each account has its own config folder, set with `CLAUDE_CONFIG_DIR`. So each account has its own login and its own keychain entry. The default account is `~/.claude`.
@@ -142,6 +170,7 @@ These stay separate for each account:
 - `~/.claude-accounts/desktop/<name>/`: data folder of each desktop copy
 - `~/.claude-accounts/backups/`: backup snapshots
 - `~/Applications/Claude <Name>.app`: desktop launchers
+- `~/Applications/Claude Accounts.app`: the Mac app (source in `app/`, built to `app/build/`)
 - one line in `~/.zshrc` that loads `cca.zsh`
 
 ## Backups

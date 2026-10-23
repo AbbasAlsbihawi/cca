@@ -31,6 +31,13 @@ for app in "$HOME"/Applications/*.app; do
   fi
 done
 
+# The Mac app, only if it is ours.
+app="$HOME/Applications/Claude Accounts.app"
+if [ -d "$app" ] && [ "$(defaults read "$app/Contents/Info" CFBundleIdentifier 2>/dev/null)" = "dev.cca.accounts" ]; then
+  rm -rf "$app"
+  echo "Removed $app"
+fi
+
 cat <<'MSG'
 
 cca removed. Your account data was kept (profiles, desktop, bindings, default-name, backups).

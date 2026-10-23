@@ -352,6 +352,11 @@ JS
   }
 }
 
+# Prints the path of the launcher app for an account.
+_cca_launcher() {
+  print -r -- "$HOME/Applications/Claude ${(C)1}.app"
+}
+
 # Makes "~/Applications/Claude <Name>.app", a launcher for `cca open <name>`.
 _cca_app() {
   emulate -L zsh
@@ -364,7 +369,7 @@ _cca_app() {
     _cca_err "unknown color '$color'. Colors: ${(j:, :)_CCA_COLORS}"
     return 1
   fi
-  local dest="$HOME/Applications/Claude ${(C)name}.app"
+  local dest=$(_cca_launcher $name)
   local res=$dest/Contents/Resources out
   local icon=$(defaults read $CCA_CLAUDE_APP/Contents/Info CFBundleIconFile 2>/dev/null)
   if [[ -e $dest && ! -e $res/cca-account ]]; then
@@ -435,7 +440,7 @@ _cca_drop_account_bindings() {
 _cca_remove() {
   emulate -L zsh
   local name=$1 dir data pid default=$(_cca_default_name)
-  local app="$HOME/Applications/Claude ${(C)name}.app"
+  local app=$(_cca_launcher $name)
   if ! _cca_exists "$name"; then
     _cca_err "usage: cca remove <name>. Accounts: ${(j:, :)${(f)"$(_cca_profiles)"}}"
     return 1
@@ -743,19 +748,84 @@ _cca_autobackup() {
   esac
 }
 
+# Prints one field of the oauthAccount in a .claude.json: _cca_oauth <file> <field>.
+_cca_oauth() {
+  [[ -r $1 ]] && (( $+commands[jq] )) || return 0
+  jq -r --arg f $2 '.oauthAccount[$f] // empty' $1 2>/dev/null
+}
+
+# Prints $1 as a JSON string (quoted and escaped); an empty value prints null.
+_cca_jstr() {
+  emulate -L zsh
+  local s=$1 c hex
+  integer i
+  [[ -n $s ]] || { print -r -- null; return 0 }
+  s=${s//\\/\\\\}
+  s=${s//\"/\\\"}
+  s=${s//$'\n'/\\n}
+  s=${s//$'\r'/\\r}
+  s=${s//$'\t'/\\t}
+  for (( i = 1; i < 32; i++ )); do
+    (( i == 9 || i == 10 || i == 13 )) && continue
+    c=${(#)i}
+    [[ $s == *"$c"* ]] || continue
+    printf -v hex '\\u%04x' $i
+    s=${s//"$c"/$hex}
+  done
+  print -r -- "\"$s\""
+}
+
+# Prints a JSON array of strings: _cca_jarr <strings...>.
+_cca_jarr() {
+  emulate -L zsh
+  local -a parts
+  local s
+  for s in "$@"; do parts+=$(_cca_jstr $s); done
+  print -r -- "[${(j:,:)parts}]"
+}
+
+# Prints everything `cca list --json` reports, as one JSON object.
+_cca_list_json() {
+  emulate -L zsh
+  local name dir json email org app res color p n sep accts
+  local default=$(_cca_default_name 2>/dev/null)
+  local -a folders
+  for name in ${(f)"$(_cca_profiles 2>/dev/null)"}; do
+    dir=$(_cca_dir $name 2>/dev/null)
+    json=${dir:+$dir/.claude.json}
+    json=${json:-$CCA_MAIN_JSON}
+    email=$(_cca_oauth $json emailAddress 2>/dev/null)
+    org=$(_cca_oauth $json organizationName 2>/dev/null)
+    app=$(_cca_launcher $name) res=$app/Contents/Resources color=
+    [[ -e $res/cca-account ]] || app=
+    [[ -r $res/cca-color ]] && color=$(<$res/cca-color)
+    [[ ${_CCA_COLORS[(Ie)$color]} -eq 0 ]] && color=
+    folders=()
+    if [[ -r $CCA_HOME/bindings ]]; then
+      while IFS=$'\t' read -r p n || [[ -n $p ]]; do
+        [[ -n $p && $n == "$name" ]] && folders+=$p
+      done < $CCA_HOME/bindings
+    fi
+    accts+="$sep{\"name\":$(_cca_jstr $name),\"isDefault\":$([[ $name == "$default" ]] && print true || print false)"
+    accts+=",\"email\":$(_cca_jstr $email),\"org\":$(_cca_jstr $org),\"loggedIn\":$([[ -n $email ]] && print true || print false)"
+    accts+=",\"color\":$(_cca_jstr $color),\"app\":$(_cca_jstr $app)"
+    accts+=",\"running\":$(_cca_app_pid $name >/dev/null 2>&1 && print true || print false),\"folders\":$(_cca_jarr $folders)}"
+    sep=,
+  done
+  print -r -- "{\"version\":1,\"default\":$(_cca_jstr $default),\"colors\":$(_cca_jarr $_CCA_COLORS),\"autobackup\":$([[ -f $CCA_LAUNCH_AGENTS/dev.cca.backup.plist ]] && print true || print false),\"snapshots\":$(_cca_jarr ${(f)"$(_cca_snapshots 2>/dev/null)"}),\"accounts\":[$accts]}"
+}
+
 _cca_list() {
   emulate -L zsh
+  [[ $1 == --json ]] && { _cca_list_json; return }
   local r=$(_cca_resolve) name dir json email org mark
   local here=${r%%$'\t'*}
   for name in ${(f)"$(_cca_profiles)"}; do
     dir=$(_cca_dir $name)
     json=${dir:+$dir/.claude.json}
     json=${json:-$CCA_MAIN_JSON}
-    email= org=
-    if [[ -r $json ]] && (( $+commands[jq] )); then
-      email=$(jq -r '.oauthAccount.emailAddress // empty' $json 2>/dev/null)
-      org=$(jq -r '.oauthAccount.organizationName // empty' $json 2>/dev/null)
-    fi
+    email=$(_cca_oauth $json emailAddress)
+    org=$(_cca_oauth $json organizationName)
     mark=' '
     [[ $name == "$here" ]] && mark='*'
     printf '%s %-14s %s\n' $mark $name "${email:-not logged in}${org:+  ($org)}"
@@ -788,7 +858,7 @@ _cca_help() {
   cca bind <name> [folder]   always use an account in a folder and its subfolders
   cca unbind [folder]        remove a folder binding
   cca run <name> [args]      run claude once with an account
-  cca list                   list accounts with their emails
+  cca list [--json]          list accounts with their emails (--json: for scripts and the Mac app)
   cca app <name> [color]     make a 'Claude <Name>' app in ~/Applications for that account
                              (colors: red orange yellow green teal blue purple pink gray)
   cca open <name>            open the Claude app for an account (or bring it to the front)
@@ -817,7 +887,7 @@ cca() {
   (( $# )) && shift
   case $cmd in
     status)         _cca_status ;;
-    list|ls)        _cca_list ;;
+    list|ls)        _cca_list "$@" ;;
     add)            _cca_add "$@" ;;
     login)          _cca_login "$@" ;;
     use)            _cca_use "$@" ;;
@@ -861,6 +931,7 @@ _cca_complete() {
   elif (( CURRENT == 3 )); then
     case $words[2] in
       login|use|bind|run|app|open|remove|restore) compadd -- ${(f)"$(_cca_profiles)"} ;;
+      list|ls)            compadd -- --json ;;
       backup)             compadd -- list --quiet ;;
       autobackup)         compadd -- on off status ;;
       unbind)             _files -/ ;;

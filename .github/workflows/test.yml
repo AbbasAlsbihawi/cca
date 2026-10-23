@@ -7,3 +7,5 @@ jobs:
       - uses: actions/checkout@v4
       - run: zsh -n cca.zsh
       - run: zsh tests/run.sh
+      - run: zsh app/build.sh
+      - run: codesign -v "app/build/Claude Accounts.app"
