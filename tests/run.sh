@@ -241,7 +241,7 @@ no "remove: refuses while its app is open" $rc
 [[ -d $A/profiles/other ]] && ok "remove: nothing moved when refused" || bad "remove: nothing moved when refused" "kept" "gone"
 out=$(run 'cca remove nope'); no "remove: unknown account" $?
 
-# 16. cca import
+# 16. cca restore from the main app (and the older name, cca import)
 mk_home
 U=11111111-2222-3333-4444-555555555555 O=aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
 C1=99999999-0000-0000-0000-000000000001 C2=99999999-0000-0000-0000-000000000002
@@ -254,30 +254,33 @@ print -r -- t1 > $H/.claude/projects/-w-p/$C1.jsonl
 print -r -- s > $H/.claude/projects/-w-p/$C1/subagents/a.jsonl
 prof personal
 print -r -- "{\"oauthAccount\":{\"accountUuid\":\"$U\"}}" > $A/profiles/personal/.claude.json
-out=$(run 'ps() { :; }; cca import personal --dry-run')
-has "import dry run: counts" "Would import into 'personal' (account 11111111…): 3 session files, 1 transcripts." "$out"
-[[ ! -e $A/desktop/personal ]] && ok "import dry run: copies nothing" || bad "import dry run: copies nothing" "no folder" "folder made"
-out=$(run 'ps() { :; }; cca import personal')
-has "import: copies" "Imported into 'personal' (account 11111111…): 3 session files, 1 transcripts." "$out"
-has "import: reports missing transcripts" "1 sessions have no transcript" "$out"
+out=$(run 'ps() { :; }; cca restore personal --dry-run')
+has "restore dry run: counts" "Would restore 'personal' from the main Claude app: 2 sessions, 1 transcripts, 0 deleted marks" "$out"
+[[ ! -e $A/desktop/personal && ! -e $A/profiles/personal/projects ]] && ok "restore dry run: copies nothing" || bad "restore dry run: copies nothing" "no folder" "folder made"
+out=$(run 'ps() { :; }; cca restore personal')
+has "restore from main app: copies" "Restored 'personal' from the main Claude app: 2 sessions, 1 transcripts" "$out"
+has "restore from main app: reports missing transcripts" "1 sessions have no transcript" "$out"
 D=$A/desktop/personal/claude-code-sessions/$U/$O
 [[ -f $D/local_1.json && -f $D/local_2.json && -f $D/archived-sessions.idx ]] \
-  && ok "import: session files copied" || bad "import: session files copied" "3 files" "$(ls $D 2>&1)"
+  && ok "restore from main app: session files copied" || bad "restore from main app: session files copied" "3 files" "$(ls $D 2>&1)"
 [[ -f $A/profiles/personal/projects/-w-p/$C1.jsonl && -f $A/profiles/personal/projects/-w-p/$C1/subagents/a.jsonl ]] \
-  && ok "import: transcript and subagents copied" || bad "import: transcript and subagents copied" "copied" "missing"
-eq "import: main app unchanged" 3 "$(ls $MS | wc -l | tr -d ' ')"
+  && ok "restore from main app: transcript and subagents copied" || bad "restore from main app: transcript and subagents copied" "copied" "missing"
+eq "restore from main app: main app unchanged" 3 "$(ls $MS | wc -l | tr -d ' ')"
 print -r -- mine > $D/local_1.json
-out=$(run 'ps() { :; }; cca import personal')
-has "import again: nothing new" "0 session files, 0 transcripts" "$out"
-eq "import: never overwrites" mine "$(<$D/local_1.json)"
-out=$(run 'cca import work'); no "import: default account refused" $?
-out=$(run 'ps() { print -r -- " 9 /Applications/Claude.app/Contents/MacOS/Claude --user-data-dir=$CCA_HOME/desktop/personal"; }; cca import personal'); no "import: refuses while its app is open" $?
+out=$(run 'ps() { :; }; cca restore personal')
+has "restore again: nothing new" "0 sessions, 0 transcripts" "$out"
+eq "restore: never overwrites" mine "$(<$D/local_1.json)"
+out=$(run 'ps() { :; }; cca import personal --dry-run')
+has "import still works as an older name" "Would restore 'personal'" "$out"
+out=$(run 'cca restore work'); no "restore: default account has no main-app import" $?
+out=$(run 'ps() { print -r -- " 9 /Applications/Claude.app/Contents/MacOS/Claude --user-data-dir=$CCA_HOME/desktop/personal"; }; cca restore personal'); no "restore: refuses while its app is open" $?
 prof other
-out=$(run 'ps() { :; }; cca import other'); rc=$?
-no "import: unknown account refused" $rc
-has "import: lists accounts in the main app" "$U  2 sessions" "$out"
-out=$(run "ps() { :; }; cca import other --account $U --dry-run")
-has "import --account" "Would import into 'other'" "$out"
+out=$(run 'ps() { :; }; cca restore other' 2>&1); rc=$?
+no "restore: unknown account uuid refused" $rc
+has "restore: lists accounts in the main app" "$U  2 sessions" "$out"
+out=$(run "ps() { :; }; cca restore other --account $U --dry-run")
+has "restore --account" "Would restore 'other' from the main Claude app" "$out"
+[[ ! -e $A/desktop/other ]] && ok "restore --account dry run: copies nothing" || bad "restore --account dry run: copies nothing" "no folder" "folder made"
 
 # 17. backups
 mk_home
@@ -347,6 +350,10 @@ out=$(run "$CTX"$'\n''cca restore personal 1999-01-01_000000'); no "restore: unk
 out=$(run "$CTX"$'\n''cca restore nope'); no "restore: unknown account refused" $?
 [[ ! -e $SD/local_p1.json ]] && ok "restore: refused calls change nothing" || bad "restore: refused calls change nothing" "nothing copied" "copied"
 SNAP1=$(ls $BK | grep -E '^[0-9]{4}-' | sort | head -1)
+rm -f $PP/p1.jsonl; print -r -- xxxxxxxxxxxxx > $SD/deleted_p9; print -r -- gone > $SD/local_p9.json
+out=$(run "$CTX"$'\n''cca restore personal --dry-run'); yes "restore dry run exits 0" $?
+has "restore dry run: reports session, transcript, tombstone" "1 sessions, 1 transcripts, 1 deleted marks to move" "$out"
+[[ ! -e $SD/local_p1.json && -e $SD/deleted_p9 ]] && ok "restore dry run: changes nothing" || bad "restore dry run: changes nothing" "nothing" "changed"
 out=$(run "$CTX"$'\n'"cca restore personal $SNAP1"); yes "restore: named snapshot works" $?
 [[ -f $SD/local_p1.json ]] && ok "restore: named snapshot brought the session back" || bad "restore: named snapshot brought the session back" "copied" "missing"
 rm -f $SD/local_p1.json

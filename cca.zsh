@@ -480,77 +480,6 @@ _cca_account_uuid() {
   [[ -n $id ]] && print -r -- $id
 }
 
-# Copies an account's Claude Code sessions from the main Claude app into its
-# own app copy, plus the transcripts they point to. Never overwrites or deletes.
-_cca_import() {
-  emulate -L zsh
-  setopt local_options null_glob
-  local name dry acct pid f rel id t slug
-  local -a hits
-  while (( $# )); do
-    case $1 in
-      -n|--dry-run) dry=1 ;;
-      --account)    acct=$2; shift ;;
-      *)            name=$1 ;;
-    esac
-    shift
-  done
-  if ! _cca_exists "$name" || [[ $name == "$(_cca_default_name)" ]]; then
-    _cca_err "usage: cca import <name> [--dry-run] [--account <uuid>]  (not the default account)"
-    return 1
-  fi
-  if pid=$(_cca_app_pid $name); then
-    _cca_err "the Claude app for '$name' is open (PID $pid). Quit it first (Cmd+Q)."
-    return 1
-  fi
-  local sessions=$CCA_MAIN_APP_DATA/claude-code-sessions
-  [[ -n $acct ]] || acct=$(_cca_account_uuid $name)
-  if [[ -z $acct || ! -d $sessions/$acct ]]; then
-    _cca_err "can't tell which sessions in the main Claude app belong to '$name'."
-    _cca_err "Log it in once (cca login $name), or pass --account <uuid>. Accounts there:"
-    for f in $sessions/*(/); do
-      hits=($f/**/local_*.json(.))
-      _cca_err "  ${f:t}  $#hits sessions"
-    done
-    return 1
-  fi
-  local src=$sessions/$acct dst=$CCA_HOME/desktop/$name/claude-code-sessions/$acct
-  local from=$CCA_MAIN_DIR/projects to=$CCA_HOME/profiles/$name/projects
-  integer n_new=0 n_old=0 t_new=0 t_old=0 t_none=0
-  if [[ -z $dry ]]; then
-    mkdir -p $CCA_HOME/desktop/$name && chmod 700 $CCA_HOME/desktop $CCA_HOME/desktop/$name || return 1
-  fi
-  # The session list files.
-  for f in $src/**/*(.); do
-    rel=${f#$src/}
-    [[ ${rel:t} == .DS_Store ]] && continue
-    if [[ -e $dst/$rel ]]; then n_old+=1; continue; fi
-    n_new+=1
-    [[ -n $dry ]] || { mkdir -p $dst/${rel:h} && cp -p $f $dst/$rel } || return 1
-  done
-  # The transcripts (and subagent folders) those sessions point to.
-  for f in $src/**/local_*.json(.); do
-    [[ $(<$f) =~ '"cliSessionId"[[:space:]]*:[[:space:]]*"([0-9a-f-]+)"' ]] || continue
-    id=$match[1]
-    hits=($from/*/$id.jsonl)
-    if (( ! $#hits )); then t_none+=1; continue; fi
-    for t in $hits; do
-      slug=${t:h:t}
-      if [[ -e $to/$slug/$id.jsonl ]]; then t_old+=1; continue; fi
-      t_new+=1
-      [[ -n $dry ]] && continue
-      mkdir -p $to/$slug && cp -p $t $to/$slug/ || return 1
-      [[ -d ${t:r} && ! -e $to/$slug/$id ]] && cp -Rp ${t:r} $to/$slug/
-    done
-  done
-  local what=Imported
-  [[ -n $dry ]] && what="Would import"
-  print -r -- "$what into '$name' (account ${acct[1,8]}…): $n_new session files, $t_new transcripts."
-  (( n_old || t_old )) && print -r -- "Already there, left as is: $n_old session files, $t_old transcripts."
-  (( t_none )) && print -r -- "$t_none sessions have no transcript on this Mac; they will list but not open."
-  [[ -n $dry ]] || print -r -- "Nothing in the main Claude app was changed. Sign '$name' in with that account to see them in the Code tab."
-}
-
 # Prints "transcripts<TAB>session lists": the two folders of an account that cca protects.
 _cca_data_dirs() {
   emulate -L zsh
@@ -586,9 +515,11 @@ _cca_json_field() {
   fi
 }
 
-# Copies file $1 to $2 only if $2 is missing. Returns 1 if it was there; counts a failed copy in $bad.
+# Copies file $1 to $2 only if $2 is missing. Returns 1 if it was there ($n_old counts those); counts a failed copy in $bad.
+# With $dry set it copies nothing and collects the new session files in $would.
 _cca_put() {
-  [[ -e $2 || -L $2 ]] && return 1
+  if [[ -e $2 || -L $2 ]]; then n_old+=1; return 1; fi
+  if [[ -n $dry ]]; then [[ ${2:t} == local_*.json ]] && would+=$2; return 0; fi
   mkdir -p ${2:h} && { cp -cp $1 $2 2>/dev/null || cp -p $1 $2 } && return 0
   _cca_err "could not copy $1"
   bad+=1
@@ -668,14 +599,26 @@ _cca_backup() {
 # Brings back an account's conversations: copies what is missing from a backup
 # and, for a desktop copy, from the main Claude app. Never overwrites. Then moves
 # the 'deleted' marks of sessions that are back to the Trash, so they show again.
+# -n/--dry-run only reports. --account <uuid> overrides the account found by login.
+# (`cca import` is the older name of this command.)
 _cca_restore() {
   emulate -L zsh
   setopt local_options null_glob
-  local name=$1 snapname=$2 pid d s proj sess src acct f id t slug tomb from
+  local name snapname pid d s proj sess src acct f id t slug tomb from dry
   local root=$CCA_HOME/backups
-  integer n_sess=0 n_tr=0 n_tomb=0 bad=0
-  if ! _cca_exists "$name"; then
-    _cca_err "usage: cca restore <name> [snapshot]. Accounts: ${(j:, :)${(f)"$(_cca_profiles)"}}"
+  local -a would pos
+  integer n_sess=0 n_tr=0 n_tomb=0 n_old=0 t_none=0 bad=0
+  while (( $# )); do
+    case $1 in
+      -n|--dry-run) dry=1 ;;
+      --account)    acct=$2; shift ;;
+      *)            pos+=$1 ;;
+    esac
+    shift
+  done
+  name=$pos[1] snapname=$pos[2]
+  if ! _cca_exists "$name" || (( $#pos > 2 )); then
+    _cca_err "usage: cca restore <name> [snapshot] [--dry-run] [--account <uuid>]. Accounts: ${(j:, :)${(f)"$(_cca_profiles)"}}"
     return 1
   fi
   if pid=$(_cca_app_pid $name); then
@@ -694,25 +637,38 @@ _cca_restore() {
     done
   fi
   if [[ $name != "$(_cca_default_name)" ]]; then
-    acct=$(_cca_account_uuid $name)
+    [[ -n $acct ]] || acct=$(_cca_account_uuid $name)
     [[ $acct =~ '^[0-9A-Za-z-]+$' && -d $CCA_MAIN_APP_DATA/claude-code-sessions/$acct ]] && src=$CCA_MAIN_APP_DATA/claude-code-sessions/$acct
   fi
   if [[ -z $snapname && -z $src ]]; then
-    _cca_err "no backup has '$name', and the main Claude app has none of its sessions. See: cca backup list"
+    if [[ $name == "$(_cca_default_name)" ]]; then
+      _cca_err "no backup has '$name'. See: cca backup list"
+      return 1
+    fi
+    _cca_err "no backup has '$name', and can't tell which sessions in the main Claude app belong to it."
+    _cca_err "Log it in once (cca login $name), or pass --account <uuid>. Accounts there:"
+    for f in $CCA_MAIN_APP_DATA/claude-code-sessions/*(/N); do
+      would=($f/**/local_*.json(.N))
+      _cca_err "  ${f:t}  $#would sessions"
+    done
     return 1
   fi
+  would=()
   if [[ -n $snapname ]]; then
     _cca_fill $root/$snapname/$name/projects $proj tr
     _cca_fill $root/$snapname/$name/claude-code-sessions $sess sess
   fi
   if [[ -n $src ]]; then
-    mkdir -p $CCA_HOME/desktop/$name && chmod 700 $CCA_HOME/desktop $CCA_HOME/desktop/$name || return 1
+    if [[ -z $dry ]]; then
+      mkdir -p $CCA_HOME/desktop/$name && chmod 700 $CCA_HOME/desktop $CCA_HOME/desktop/$name || return 1
+    fi
     _cca_fill $src $sess/$acct sess
     # The transcripts those sessions point to (and their subagent folders).
     from=$CCA_MAIN_DIR/projects
     for f in $src/**/local_*.json(.N); do
       id=$(_cca_json_field $f cliSessionId)
       [[ $id =~ '^[A-Za-z0-9_-]+$' ]] || continue
+      if [[ -z $(print -rl -- $from/*/$id.jsonl(N)) ]]; then t_none+=1; continue; fi
       for t in $from/*/$id.jsonl(N); do
         slug=${t:h:t}
         _cca_put $t $proj/$slug/$id.jsonl && n_tr+=1
@@ -721,12 +677,22 @@ _cca_restore() {
     done
   fi
   # A session that was logged out of has a 'deleted' mark next to it, which hides it.
-  for f in $sess/**/local_*.json(.N); do
+  # (A dry run also looks at the sessions that would be copied.)
+  for f in $sess/**/local_*.json(.N) $would; do
     id=${${f:t}#local_} id=${id%.json}
     tomb=${f:h}/deleted_$id
-    [[ -f $tomb ]] && { _cca_trash $tomb && n_tomb+=1 || bad+=1 }
+    [[ -f $tomb ]] || continue
+    if [[ -n $dry ]]; then n_tomb+=1; continue; fi
+    _cca_trash $tomb && n_tomb+=1 || bad+=1
   done
-  print -r -- "Restored '$name' from ${snapname:-the main Claude app}${snapname:+${src:+ and the main Claude app}}: $n_sess sessions, $n_tr transcripts, $n_tomb deleted marks moved to the Trash. Nothing was overwritten."
+  local from_what="${snapname:-the main Claude app}${snapname:+${src:+ and the main Claude app}}"
+  if [[ -n $dry ]]; then
+    print -r -- "Would restore '$name' from $from_what: $n_sess sessions, $n_tr transcripts, $n_tomb deleted marks to move to the Trash. Nothing was changed."
+  else
+    print -r -- "Restored '$name' from $from_what: $n_sess sessions, $n_tr transcripts, $n_tomb deleted marks moved to the Trash. Nothing was overwritten."
+  fi
+  (( n_old )) && print -r -- "Already there, left as is: $n_old files."
+  (( t_none )) && print -r -- "$t_none sessions have no transcript on this Mac; they will list but not open."
   (( bad == 0 ))
 }
 
@@ -827,9 +793,9 @@ _cca_help() {
                              (colors: red orange yellow green teal blue purple pink gray)
   cca open <name>            open the Claude app for an account (or bring it to the front)
   cca remove <name>          log out an account; move its folders and launcher to the Trash
-  cca import <name> [-n]     copy its old Code sessions from the main Claude app (-n: dry run)
   cca backup [--quiet|list]  save every account's conversations (keeps the newest 30)
-  cca restore <name> [snap]  bring an account's conversations back (never overwrites)
+  cca restore <name> [snap] [-n] [--account <uuid>]
+                             bring an account's conversations back (never overwrites; -n: dry run)
   cca autobackup on|off|status   a daily backup at 13:00
 
 Order: cca use > folder binding > default account (~/.claude).
@@ -861,7 +827,7 @@ cca() {
     app)            _cca_app "$@" ;;
     open)           _cca_open "$@" ;;
     remove|rm)      _cca_remove "$@" ;;
-    import)         _cca_import "$@" ;;
+    import)         _cca_restore "$@" ;;
     backup)         _cca_backup "$@" ;;
     restore)        _cca_restore "$@" ;;
     autobackup)     _cca_autobackup "$@" ;;
@@ -889,20 +855,21 @@ claude() {
 }
 
 _cca_complete() {
-  local -a cmds=(status list add login use bind unbind run app open remove import backup restore autobackup help)
+  local -a cmds=(status list add login use bind unbind run app open remove backup restore autobackup help)
   if (( CURRENT == 2 )); then
     compadd -a cmds
   elif (( CURRENT == 3 )); then
     case $words[2] in
-      login|use|bind|run|app|open|remove|import|restore) compadd -- ${(f)"$(_cca_profiles)"} ;;
+      login|use|bind|run|app|open|remove|restore) compadd -- ${(f)"$(_cca_profiles)"} ;;
       backup)             compadd -- list --quiet ;;
       autobackup)         compadd -- on off status ;;
       unbind)             _files -/ ;;
     esac
   elif (( CURRENT == 4 )) && [[ $words[2] == bind ]]; then
     _files -/
-  elif (( CURRENT == 4 )) && [[ $words[2] == restore ]]; then
-    compadd -- ${(f)"$(_cca_snapshots)"}
+  elif (( CURRENT >= 4 )) && [[ $words[2] == restore ]]; then
+    (( CURRENT == 4 )) && compadd -- ${(f)"$(_cca_snapshots)"}
+    compadd -- --dry-run --account
   fi
 }
 # `if` so sourcing still succeeds without completion (the app launchers run zsh -f).
