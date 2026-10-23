@@ -7,9 +7,14 @@ jobs:
       - uses: actions/checkout@v4
       - run: zsh -n cca.zsh
       - run: zsh tests/run.sh
-      - name: Syntax-check cca.ps1
+      # GitHub dot-sources the step body, so a called script's `exit` lands in
+      # $LASTEXITCODE rather than failing the step: pass it on, or a parse error
+      # goes green.
+      - name: Syntax-check every .ps1
+        shell: pwsh
         run: |
-          pwsh -NoProfile -Command '$e=$null; [void][System.Management.Automation.Language.Parser]::ParseFile("cca.ps1",[ref]$null,[ref]$e); if($e){$e|ForEach-Object{$_.Message}; exit 1}'
+          ./tests/parse-ps1.ps1
+          exit $LASTEXITCODE
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
@@ -18,3 +23,15 @@ jobs:
           for f in $(find desktop/main desktop/renderer -name '*.js') desktop/preload.js; do
             node --check "$f"
           done
+
+  windows-powershell:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      # `powershell` is Windows PowerShell 5.1, the version cca.ps1 targets;
+      # `pwsh` would be 7, which accepts syntax 5.1 rejects.
+      - name: Syntax-check every .ps1 under Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          .\tests\parse-ps1.ps1
+          exit $LASTEXITCODE
