@@ -80,6 +80,9 @@ rm -rf ~/.claude-accounts
 | `cca open <name>` | open the Claude app for an account (or bring it to the front) |
 | `cca remove <name>` | log out an account; move its folders and launcher to the Trash |
 | `cca import <name> [-n]` | copy its old Code sessions from the main Claude app (`-n`: dry run) |
+| `cca backup [--quiet\|list]` | save every account's conversations; `list` shows the snapshots |
+| `cca restore <name> [snapshot]` | bring an account's conversations back, without overwriting anything |
+| `cca autobackup on\|off\|status` | a daily backup at 13:00 |
 
 ## Which account `claude` uses
 
@@ -138,6 +141,7 @@ These stay separate for each account:
 - `~/.claude-accounts/bindings`: folder bindings
 - `~/.claude-accounts/profiles/<name>/`: config folder of each account
 - `~/.claude-accounts/desktop/<name>/`: data folder of each desktop copy
+- `~/.claude-accounts/backups/`: backup snapshots
 - `~/Applications/Claude <Name>.app`: desktop launchers
 - one line in `~/.zshrc` that loads `cca.zsh`
 
@@ -151,6 +155,36 @@ cca import personal
 ```
 
 Quit that account's copy first. It copies the session list and the transcripts they point to; it never overwrites or deletes anything, and the main app keeps its copy. The account is found from its terminal login (`cca login`) or from the one account its copy has signed in with; otherwise pass `--account <uuid>`. Chats in the Chat tab live on Anthropic's servers and show up by themselves once the copy is signed in to that account.
+
+## Backups
+
+`cca backup` saves, for every account:
+
+- its Claude Code transcripts (`projects`)
+- its desktop Code tab session list (`claude-code-sessions`)
+- your folder bindings and the default account name
+
+Each backup is a snapshot folder in `~/.claude-accounts/backups/<date_time>`. It uses APFS clones, so it is instant and takes almost no extra space. cca keeps the newest 30 snapshots (`CCA_BACKUP_KEEP` changes this) and logs each run in `backups/backup.log`.
+
+```sh
+cca backup                 # take a snapshot now
+cca backup list            # snapshots, newest first
+cca restore personal       # bring conversations back from the newest snapshot
+cca restore personal 2026-05-01_130000   # from a chosen snapshot
+cca autobackup on          # every day at 13:00 (off to stop, status to check)
+```
+
+`cca remove` and `cca login` take a backup first.
+
+Logging out inside a desktop copy hides its conversations from the Code tab. They are not deleted. `cca restore <name>` brings them back: it copies what is missing from the newest snapshot and, for a desktop copy, from the main Claude app, then moves the "deleted" marks of those sessions to the Trash. Quit that account's Claude app first. Restore never overwrites a file.
+
+Claude Code deletes conversations older than 30 days by default. To keep them, add this to `~/.claude/settings.json`:
+
+```json
+"cleanupPeriodDays": 3650
+```
+
+Backups sit on the same disk. Keep Time Machine on for a disk failure.
 
 ## Removing an account
 

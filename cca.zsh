@@ -21,6 +21,7 @@
 : ${CCA_MAIN_DIR:=$HOME/.claude}
 : ${CCA_MAIN_JSON:=$HOME/.claude.json}
 : ${CCA_MAIN_APP_DATA:="$HOME/Library/Application Support/Claude"}
+: ${CCA_LAUNCH_AGENTS:=$HOME/Library/LaunchAgents}
 typeset -ga CCA_SHARED=(settings.json CLAUDE.md skills plugins agents commands output-styles keybindings.json)
 
 # Remember which file this shell loaded and when it changed, so `cca` can
@@ -148,6 +149,7 @@ _cca_login() {
   shift
   local dir=$(_cca_dir $name)
   [[ -n $dir ]] && _cca_link_shared $dir
+  _cca_backup --quiet >/dev/null 2>&1 || :
   print -r -- "Signing in '$name'. If the browser is signed in to another Claude account, switch it there first."
   _cca_exec $name claude auth login "$@"
 }
@@ -442,6 +444,7 @@ _cca_remove() {
     _cca_err "the Claude app for '$name' is open (PID $pid). Quit it first (Cmd+Q)."
     return 1
   fi
+  _cca_backup --quiet >/dev/null 2>&1 || :
   dir=$(_cca_dir $name)
   data=$(_cca_app_data $name)
   _cca_exec $name claude auth logout >/dev/null 2>&1
@@ -548,6 +551,232 @@ _cca_import() {
   [[ -n $dry ]] || print -r -- "Nothing in the main Claude app was changed. Sign '$name' in with that account to see them in the Code tab."
 }
 
+# Prints "transcripts<TAB>session lists": the two folders of an account that cca protects.
+_cca_data_dirs() {
+  emulate -L zsh
+  _cca_exists "$1" || return 1
+  if [[ $1 == "$(_cca_default_name)" ]]; then
+    print -r -- $CCA_MAIN_DIR/projects$'\t'$CCA_MAIN_APP_DATA/claude-code-sessions
+  else
+    print -r -- $CCA_HOME/profiles/$1/projects$'\t'$CCA_HOME/desktop/$1/claude-code-sessions
+  fi
+}
+
+# Prints the backup snapshot names, newest first.
+_cca_snapshots() {
+  emulate -L zsh
+  setopt local_options extended_glob null_glob
+  local d
+  for d in $CCA_HOME/backups/[0-9](#c4)-[0-9](#c2)-[0-9](#c2)_[0-9](#c6)(-<->)#(/On); do
+    print -r -- ${d:t}
+  done
+}
+
+# Copies a folder with APFS clones (instant, no extra space); plain copy if cloning fails.
+_cca_clone() {
+  cp -Rcp $1 $2 2>/dev/null || { rm -rf "${2:?}"; cp -Rp $1 $2 }
+}
+
+# Prints one top-level string field of a JSON file.
+_cca_json_field() {
+  if (( $+commands[jq] )); then
+    jq -r --arg k $2 '.[$k] // empty | strings' $1 2>/dev/null
+  else
+    python3 -I -c 'import json,sys; v=json.load(open(sys.argv[1])).get(sys.argv[2]); print(v if isinstance(v,str) else "")' $1 $2 2>/dev/null
+  fi
+}
+
+# Copies file $1 to $2 only if $2 is missing. Returns 1 if it was there; counts a failed copy in $bad.
+_cca_put() {
+  [[ -e $2 || -L $2 ]] && return 1
+  mkdir -p ${2:h} && { cp -cp $1 $2 2>/dev/null || cp -p $1 $2 } && return 0
+  _cca_err "could not copy $1"
+  bad+=1
+  return 1
+}
+
+# Copies the files under $1 that are missing under $2. Kind sess counts session
+# files (to $n_sess), tr counts transcripts (to $n_tr). The caller declares the counters.
+_cca_fill() {
+  emulate -L zsh
+  setopt local_options null_glob
+  local f rel
+  for f in $1/**/*(.DN); do
+    rel=${f#$1/}
+    [[ ${rel:t} == .DS_Store ]] && continue
+    _cca_put $f $2/$rel || continue
+    case $3 in
+      sess) [[ ${rel:t} == local_*.json ]] && n_sess+=1 ;;
+      tr)   [[ $rel == */*.jsonl && $rel != */*/* ]] && n_tr+=1 ;;
+    esac
+  done
+  return 0
+}
+
+# Snapshots every account's transcripts and desktop session lists, plus bindings
+# and the default name, into ~/.claude-accounts/backups/<time>. Keeps the newest
+# $CCA_BACKUP_KEEP (30). `cca backup list` shows them.
+_cca_backup() {
+  emulate -L zsh
+  setopt local_options extended_glob null_glob
+  local quiet name d proj sess src snap stamp keep=${CCA_BACKUP_KEEP:-30}
+  local root=$CCA_HOME/backups lock=$CCA_HOME/backups/.lock
+  integer n=1 accts=0 dirs=0 bad=0 got
+  local -a snaps old
+  case $1 in
+    list)    _cca_snapshots; return 0 ;;
+    --quiet) quiet=1 ;;
+    '')      ;;
+    *)       _cca_err "usage: cca backup [--quiet]  or  cca backup list"; return 1 ;;
+  esac
+  [[ $keep == <-> ]] && (( keep >= 1 )) || keep=30
+  mkdir -p $root && chmod 700 $CCA_HOME $root || return 1
+  # One run at a time; a lock older than an hour is left over from a crash.
+  if ! mkdir $lock 2>/dev/null; then
+    [[ -n $(find $lock -maxdepth 0 -mmin +60 2>/dev/null) ]] && rmdir $lock 2>/dev/null
+    mkdir $lock 2>/dev/null || { _cca_err "another backup is running"; return 1 }
+  fi
+  {
+    stamp=$(date +%Y-%m-%d_%H%M%S) snap=$root/$stamp
+    while [[ -e $snap ]]; do n+=1; snap=$root/$stamp-$n; done
+    mkdir -m 700 $snap || { _cca_err "could not make $snap"; return 1 }
+    for name in ${(f)"$(_cca_profiles)"}; do
+      d=$(_cca_data_dirs $name) proj=${d%%$'\t'*} sess=${d#*$'\t'} got=0
+      for src in $proj $sess; do
+        [[ -d $src ]] || continue
+        mkdir -p $snap/$name && _cca_clone $src $snap/$name/${src:t} || { _cca_err "could not copy $src"; bad+=1; continue }
+        dirs+=1 got=1
+      done
+      accts+=got
+    done
+    mkdir -p $snap/cca
+    for src in bindings default-name; do
+      [[ -f $CCA_HOME/$src ]] && cp -p $CCA_HOME/$src $snap/cca/$src
+    done
+    snaps=(${(f)"$(_cca_snapshots)"})
+    # A snapshot with a failed folder must not push out the good older ones.
+    (( $#snaps > keep && bad == 0 )) && old=($snaps[$((keep + 1)),-1])
+    for d in $old; do rm -rf "${root:?}/${d:?}"; done
+    print -r -- "$(date '+%Y-%m-%d %H:%M:%S') ${snap:t} accounts=$accts folders=$dirs failed=$bad pruned=$#old" >> $root/backup.log
+    [[ -n $quiet ]] || print -r -- "Backup ${snap:t}: $accts accounts, $dirs folders. Keeping the newest $keep."
+    (( bad == 0 ))
+  } always {
+    rmdir $lock 2>/dev/null
+  }
+}
+
+# Brings back an account's conversations: copies what is missing from a backup
+# and, for a desktop copy, from the main Claude app. Never overwrites. Then moves
+# the 'deleted' marks of sessions that are back to the Trash, so they show again.
+_cca_restore() {
+  emulate -L zsh
+  setopt local_options null_glob
+  local name=$1 snapname=$2 pid d s proj sess src acct f id t slug tomb from
+  local root=$CCA_HOME/backups
+  integer n_sess=0 n_tr=0 n_tomb=0 bad=0
+  if ! _cca_exists "$name"; then
+    _cca_err "usage: cca restore <name> [snapshot]. Accounts: ${(j:, :)${(f)"$(_cca_profiles)"}}"
+    return 1
+  fi
+  if pid=$(_cca_app_pid $name); then
+    _cca_err "the Claude app for '$name' is open (PID $pid). Quit it first (Cmd+Q)."
+    return 1
+  fi
+  d=$(_cca_data_dirs $name) proj=${d%%$'\t'*} sess=${d#*$'\t'}
+  if [[ -n $snapname ]]; then
+    [[ $snapname =~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{6}(-[0-9]+)?$' && -d $root/$snapname/$name ]] || {
+      _cca_err "snapshot '$snapname' has nothing for '$name'. See: cca backup list"
+      return 1
+    }
+  else
+    for s in ${(f)"$(_cca_snapshots)"}; do
+      [[ -d $root/$s/$name ]] && { snapname=$s; break }
+    done
+  fi
+  if [[ $name != "$(_cca_default_name)" ]]; then
+    acct=$(_cca_account_uuid $name)
+    [[ $acct =~ '^[0-9A-Za-z-]+$' && -d $CCA_MAIN_APP_DATA/claude-code-sessions/$acct ]] && src=$CCA_MAIN_APP_DATA/claude-code-sessions/$acct
+  fi
+  if [[ -z $snapname && -z $src ]]; then
+    _cca_err "no backup has '$name', and the main Claude app has none of its sessions. See: cca backup list"
+    return 1
+  fi
+  if [[ -n $snapname ]]; then
+    _cca_fill $root/$snapname/$name/projects $proj tr
+    _cca_fill $root/$snapname/$name/claude-code-sessions $sess sess
+  fi
+  if [[ -n $src ]]; then
+    mkdir -p $CCA_HOME/desktop/$name && chmod 700 $CCA_HOME/desktop $CCA_HOME/desktop/$name || return 1
+    _cca_fill $src $sess/$acct sess
+    # The transcripts those sessions point to (and their subagent folders).
+    from=$CCA_MAIN_DIR/projects
+    for f in $src/**/local_*.json(.N); do
+      id=$(_cca_json_field $f cliSessionId)
+      [[ $id =~ '^[A-Za-z0-9_-]+$' ]] || continue
+      for t in $from/*/$id.jsonl(N); do
+        slug=${t:h:t}
+        _cca_put $t $proj/$slug/$id.jsonl && n_tr+=1
+        [[ -d ${t:r} ]] && _cca_fill ${t:r} $proj/$slug/$id none
+      done
+    done
+  fi
+  # A session that was logged out of has a 'deleted' mark next to it, which hides it.
+  for f in $sess/**/local_*.json(.N); do
+    id=${${f:t}#local_} id=${id%.json}
+    tomb=${f:h}/deleted_$id
+    [[ -f $tomb ]] && { _cca_trash $tomb && n_tomb+=1 || bad+=1 }
+  done
+  print -r -- "Restored '$name' from ${snapname:-the main Claude app}${snapname:+${src:+ and the main Claude app}}: $n_sess sessions, $n_tr transcripts, $n_tomb deleted marks moved to the Trash. Nothing was overwritten."
+  (( bad == 0 ))
+}
+
+# launchctl, in one place so tests can replace it.
+_cca_launchctl() { launchctl "$@" }
+
+# Turns the daily backup (13:00, a launchd job) on or off.
+_cca_autobackup() {
+  emulate -L zsh
+  local plist=$CCA_LAUNCH_AGENTS/dev.cca.backup.plist home=${CCA_HOME:A} cmd newest
+  case $1 in
+    on)
+      mkdir -p $CCA_LAUNCH_AGENTS $home/backups && chmod 700 $home $home/backups || return 1
+      cmd="source ${(q)home}/cca.zsh && cca backup --quiet"
+      cmd=${cmd//&/&amp;} cmd=${cmd//</&lt;} home=${home//&/&amp;} home=${home//</&lt;}
+      print -r -- '<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>dev.cca.backup</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string><string>-f</string><string>-c</string>
+    <string>'$cmd'</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict><key>CCA_HOME</key><string>'$home'</string></dict>
+  <key>StartCalendarInterval</key>
+  <dict><key>Hour</key><integer>13</integer><key>Minute</key><integer>0</integer></dict>
+  <key>StandardOutPath</key><string>'$home'/backups/autobackup.log</string>
+  <key>StandardErrorPath</key><string>'$home'/backups/autobackup.log</string>
+</dict>
+</plist>' > $plist || return 1
+      _cca_launchctl bootout gui/$UID $plist >/dev/null 2>&1
+      _cca_launchctl bootstrap gui/$UID $plist || { _cca_err "launchctl could not load $plist"; return 1 }
+      print -r -- "Autobackup on: every day at 13:00 (a missed run happens at the next wake)." ;;
+    off)
+      _cca_launchctl bootout gui/$UID $plist >/dev/null 2>&1
+      rm -f $plist
+      print -r -- "Autobackup off." ;;
+    status)
+      local -a snaps=(${(f)"$(_cca_snapshots)"})
+      newest=$snaps[1]
+      print -r -- "Autobackup: $([[ -f $plist ]] && print on || print off). Newest backup: ${newest:-none}" ;;
+    *)
+      _cca_err "usage: cca autobackup on|off|status"
+      return 1 ;;
+  esac
+}
+
 _cca_list() {
   emulate -L zsh
   local r=$(_cca_resolve) name dir json email org mark
@@ -599,6 +828,9 @@ _cca_help() {
   cca open <name>            open the Claude app for an account (or bring it to the front)
   cca remove <name>          log out an account; move its folders and launcher to the Trash
   cca import <name> [-n]     copy its old Code sessions from the main Claude app (-n: dry run)
+  cca backup [--quiet|list]  save every account's conversations (keeps the newest 30)
+  cca restore <name> [snap]  bring an account's conversations back (never overwrites)
+  cca autobackup on|off|status   a daily backup at 13:00
 
 Order: cca use > folder binding > default account (~/.claude).
 Set CCA_QUIET=1 to hide the line 'claude' prints about the account."
@@ -630,6 +862,9 @@ cca() {
     open)           _cca_open "$@" ;;
     remove|rm)      _cca_remove "$@" ;;
     import)         _cca_import "$@" ;;
+    backup)         _cca_backup "$@" ;;
+    restore)        _cca_restore "$@" ;;
+    autobackup)     _cca_autobackup "$@" ;;
     help|-h|--help) _cca_help ;;
     *)              _cca_err "unknown command '$cmd'"; _cca_help; return 1 ;;
   esac
@@ -654,16 +889,20 @@ claude() {
 }
 
 _cca_complete() {
-  local -a cmds=(status list add login use bind unbind run app open remove import help)
+  local -a cmds=(status list add login use bind unbind run app open remove import backup restore autobackup help)
   if (( CURRENT == 2 )); then
     compadd -a cmds
   elif (( CURRENT == 3 )); then
     case $words[2] in
-      login|use|bind|run|app|open|remove|import) compadd -- ${(f)"$(_cca_profiles)"} ;;
+      login|use|bind|run|app|open|remove|import|restore) compadd -- ${(f)"$(_cca_profiles)"} ;;
+      backup)             compadd -- list --quiet ;;
+      autobackup)         compadd -- on off status ;;
       unbind)             _files -/ ;;
     esac
   elif (( CURRENT == 4 )) && [[ $words[2] == bind ]]; then
     _files -/
+  elif (( CURRENT == 4 )) && [[ $words[2] == restore ]]; then
+    compadd -- ${(f)"$(_cca_snapshots)"}
   fi
 }
 # `if` so sourcing still succeeds without completion (the app launchers run zsh -f).

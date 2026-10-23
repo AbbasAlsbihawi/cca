@@ -279,5 +279,122 @@ has "import: lists accounts in the main app" "$U  2 sessions" "$out"
 out=$(run "ps() { :; }; cca import other --account $U --dry-run")
 has "import --account" "Would import into 'other'" "$out"
 
+# 17. backups
+mk_home
+U=11111111-2222-3333-4444-555555555555 O=aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+W=22222222-2222-3333-4444-555555555555
+C1=99999999-0000-0000-0000-000000000001 C2=99999999-0000-0000-0000-000000000002
+MAD="$H/Library/Application Support/Claude"
+LA=$H/Library/LaunchAgents
+BK=$A/backups
+# default account (work): main app sessions + ~/.claude transcripts; personal: its own copy
+mkdir -p "$MAD/claude-code-sessions/$W/$O" $H/.claude/projects/-w-a
+print -r -- '{"sessionId":"local_w1"}' > "$MAD/claude-code-sessions/$W/$O/local_w1.json"
+print -r -- w1 > $H/.claude/projects/-w-a/w1.jsonl
+prof personal
+mkdir -p $A/desktop/personal/claude-code-sessions/$U/$O $A/profiles/personal/projects/-p-b
+print -r -- '{"sessionId":"local_p1","cliSessionId":"p1"}' > $A/desktop/personal/claude-code-sessions/$U/$O/local_p1.json
+print -r -- p1 > $A/profiles/personal/projects/-p-b/p1.jsonl
+print -r -- "{\"oauthAccount\":{\"accountUuid\":\"$U\"}}" > $A/profiles/personal/.claude.json
+print -r -- "$T/work"$'\t'personal > $A/bindings
+CTX='export CCA_MAIN_APP_DATA="$HOME/Library/Application Support/Claude" CCA_LAUNCH_AGENTS=$HOME/Library/LaunchAgents CCA_TRASH=$T/trash
+ps() { :; }
+launchctl() { print -r -- "LAUNCHCTL $*" >> $T/launchctl.log; }'
+out=$(run "$CTX"$'\n''cca backup'); rc=$?
+yes "backup exits 0" $rc
+has "backup prints a summary" "2 accounts, 4 folders" "$out"
+SN=$(ls $BK | grep -E '^[0-9]{4}-' | head -1)
+eq "backup: snapshot dir mode 700" 700 "$(mode $BK/$SN)"
+[[ -f $BK/$SN/work/projects/-w/a/w1.jsonl || -f $BK/$SN/work/projects/-w-a/w1.jsonl ]] && [[ -f $BK/$SN/work/claude-code-sessions/$W/$O/local_w1.json ]] \
+  && ok "backup: default account files" || bad "backup: default account files" "projects + sessions" "$(find $BK/$SN -type f 2>&1)"
+[[ -f $BK/$SN/personal/projects/-p-b/p1.jsonl && -f $BK/$SN/personal/claude-code-sessions/$U/$O/local_p1.json ]] \
+  && ok "backup: profile files" || bad "backup: profile files" "projects + sessions" "$(find $BK/$SN -type f 2>&1)"
+eq "backup: bindings and default-name saved" "bindings default-name" "$(ls $BK/$SN/cca | tr '\n' ' ' | sed 's/ $//')"
+[[ -d $BK/.lock ]] && bad "backup: lock released" "no .lock" ".lock left" || ok "backup: lock released"
+[[ -s $BK/backup.log ]] && ok "backup: log line written" || bad "backup: log line written" "backup.log" "missing"
+out=$(run "$CTX"$'\n''cca backup --quiet'); eq "backup --quiet prints nothing" "" "$out"
+mkdir $BK/.lock
+out=$(run "$CTX"$'\n''cca backup'); no "backup refuses while locked" $?
+touch -t 200001010000 $BK/.lock
+out=$(run "$CTX"$'\n''cca backup --quiet'); yes "backup ignores a stale lock" $?
+rm -rf $BK
+for i in 1 2 3; do run "$CTX"$'\n''CCA_BACKUP_KEEP=2 cca backup --quiet; sleep 1' >/dev/null; done
+eq "backup keeps only the newest 2" 2 "$(ls $BK | grep -cE '^[0-9]{4}-')"
+eq "backup list: newest first" "$(ls $BK | grep -E '^[0-9]{4}-' | sort -r)" "$(run 'cca backup list')"
+out=$(run 'cca backup nope'); no "backup: bad argument refused" $?
+
+# 18. restore
+rm -rf $BK $T/trash
+SD=$A/desktop/personal/claude-code-sessions/$U/$O
+PP=$A/profiles/personal/projects/-p-b
+print -r -- '{"sessionId":"local_p2"}' > $SD/local_p2.json
+run "$CTX"$'\n''cca backup --quiet' >/dev/null
+# lose one session and transcript; change another session (must not be overwritten)
+rm -f $SD/local_p1.json $PP/p1.jsonl
+print -r -- changed > $SD/local_p2.json
+print -r -- gone > $SD/local_p9.json
+print -r -- 'xxxxxxxxxxxxx' > $SD/deleted_p9
+print -r -- 'xxxxxxxxxxxxx' > $SD/deleted_nomatch
+out=$(run "$CTX"$'\n''cca restore personal'); rc=$?
+yes "restore exits 0" $rc
+has "restore: counts" "1 sessions, 1 transcripts, 1 deleted marks" "$out"
+[[ -f $SD/local_p1.json && -f $PP/p1.jsonl ]] && ok "restore: missing session and transcript copied" || bad "restore: missing session and transcript copied" "both back" "missing"
+eq "restore: existing changed file not overwritten" changed "$(<$SD/local_p2.json)"
+[[ ! -e $SD/deleted_p9 && -e $SD/deleted_nomatch ]] && ok "restore: matching tombstone gone, unmatched kept" || bad "restore: matching tombstone gone, unmatched kept" "p9 gone, nomatch kept" "$(ls $SD)"
+eq "restore: tombstone is in the Trash" 1 "$(ls $T/trash | wc -l | tr -d ' ')"
+rm -f $SD/local_p1.json
+out=$(run "$CTX"$'\n''cca restore personal 1999-01-01_000000'); no "restore: unknown snapshot refused" $?
+out=$(run "$CTX"$'\n''cca restore nope'); no "restore: unknown account refused" $?
+[[ ! -e $SD/local_p1.json ]] && ok "restore: refused calls change nothing" || bad "restore: refused calls change nothing" "nothing copied" "copied"
+SNAP1=$(ls $BK | grep -E '^[0-9]{4}-' | sort | head -1)
+out=$(run "$CTX"$'\n'"cca restore personal $SNAP1"); yes "restore: named snapshot works" $?
+[[ -f $SD/local_p1.json ]] && ok "restore: named snapshot brought the session back" || bad "restore: named snapshot brought the session back" "copied" "missing"
+rm -f $SD/local_p1.json
+out=$(run "$CTX"$'\n''ps() { print -r -- " 9 /Applications/Claude.app/Contents/MacOS/Claude --user-data-dir=$CCA_HOME/desktop/personal"; }; cca restore personal'); rc=$?
+no "restore: refuses while its app is open" $rc
+[[ ! -e $SD/local_p1.json ]] && ok "restore: open app, nothing copied" || bad "restore: open app, nothing copied" "nothing" "copied"
+out=$(run "$CTX"$'\n''ps() { print -r -- " 8 /Applications/Claude.app/Contents/MacOS/Claude"; }; cca restore work'); no "restore: default refused while the main app is open" $?
+
+# restore from the main app by accountUuid, no snapshot needed
+rm -rf $BK $A/desktop/personal $A/profiles/personal/projects
+mkdir -p "$MAD/claude-code-sessions/$U/$O" $H/.claude/projects/-w-p/$C1/subagents
+print -r -- "{\"sessionId\":\"local_m1\",\"cliSessionId\":\"$C1\"}" > "$MAD/claude-code-sessions/$U/$O/local_m1.json"
+print -r -- t1 > $H/.claude/projects/-w-p/$C1.jsonl
+print -r -- s > $H/.claude/projects/-w-p/$C1/subagents/a.jsonl
+out=$(run "$CTX"$'\n''cca restore personal'); rc=$?
+yes "restore from main app exits 0" $rc
+has "restore from main app: counts" "1 sessions, 1 transcripts, 0 deleted marks" "$out"
+[[ -f $A/desktop/personal/claude-code-sessions/$U/$O/local_m1.json && -f $A/profiles/personal/projects/-w-p/$C1.jsonl && -f $A/profiles/personal/projects/-w-p/$C1/subagents/a.jsonl ]] \
+  && ok "restore from main app: session, transcript, subagents copied" || bad "restore from main app: session, transcript, subagents copied" "copied" "$(find $A/desktop $A/profiles/personal -type f 2>&1)"
+eq "restore from main app: main app untouched" 1 "$(ls "$MAD/claude-code-sessions/$U/$O" | wc -l | tr -d ' ')"
+
+# 19. autobackup
+rm -rf $LA $T/launchctl.log
+out=$(run "$CTX"$'\n''cca autobackup on'); rc=$?
+yes "autobackup on exits 0" $rc
+PL=$LA/dev.cca.backup.plist
+[[ -f $PL ]] && ok "autobackup on: plist written" || bad "autobackup on: plist written" "$PL" "missing"
+has "autobackup plist: runs the backup" "source $A/cca.zsh &amp;&amp; cca backup --quiet" "$(<$PL)"
+has "autobackup plist: 13:00" "<key>Hour</key><integer>13</integer>" "$(<$PL)"
+has "autobackup plist: log file" "$A/backups/autobackup.log" "$(<$PL)"
+plutil -lint $PL >/dev/null 2>&1; yes "autobackup plist is valid" $?
+has "autobackup on: bootstrap called" "LAUNCHCTL bootstrap gui/$(id -u) $PL" "$(<$T/launchctl.log)"
+has "autobackup status: on" "Autobackup: on" "$(run "$CTX"$'\n''cca autobackup status')"
+out=$(run "$CTX"$'\n''cca autobackup off'); rc=$?
+yes "autobackup off exits 0" $rc
+[[ ! -e $PL ]] && ok "autobackup off: plist removed" || bad "autobackup off: plist removed" "gone" "still there"
+has "autobackup off: bootout called" "LAUNCHCTL bootout gui/$(id -u) $PL" "$(<$T/launchctl.log)"
+has "autobackup status: off" "Autobackup: off" "$(run "$CTX"$'\n''cca autobackup status')"
+out=$(run "$CTX"$'\n''cca autobackup maybe'); no "autobackup: bad argument refused" $?
+
+# 20. remove and login back up first
+rm -rf $BK
+out=$(run "$CTX"$'\n''cca remove personal')
+eq "remove triggers a backup" 1 "$(ls $BK | grep -cE '^[0-9]{4}-')"
+rm -rf $BK
+prof extra
+out=$(run "$CTX"$'\n''cca login extra')
+eq "login triggers a backup" 1 "$(ls $BK | grep -cE '^[0-9]{4}-')"
+
 print -r -- "$pass passed, $fail failed"
 (( fail == 0 ))

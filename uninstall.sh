@@ -1,6 +1,6 @@
 #!/bin/sh
 # Uninstall cca: removes the ~/.zshrc lines, cca.zsh and cca launcher apps.
-# Account data in ~/.claude-accounts is kept.
+# Account data and backups in ~/.claude-accounts are kept.
 set -e
 
 rc="$HOME/.zshrc"
@@ -16,6 +16,13 @@ fi
 
 rm -f "$HOME/.claude-accounts/cca.zsh"
 
+plist="$HOME/Library/LaunchAgents/dev.cca.backup.plist"
+if [ -f "$plist" ]; then
+  launchctl bootout "gui/$(id -u)" "$plist" 2>/dev/null || true
+  rm -f "$plist"
+  echo "Removed the daily backup job"
+fi
+
 for app in "$HOME"/Applications/*.app; do
   [ -d "$app" ] || continue
   if [ -e "$app/Contents/Resources/cca-account" ]; then
@@ -26,7 +33,7 @@ done
 
 cat <<'MSG'
 
-cca removed. Your account data was kept (profiles, desktop, bindings, default-name).
+cca removed. Your account data was kept (profiles, desktop, bindings, default-name, backups).
 To remove it by hand:
   rm -rf ~/.claude-accounts
 macOS keychain items named "Claude Code-credentials-<hash>" stay;
