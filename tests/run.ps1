@@ -10,6 +10,17 @@
 # Usage: powershell -NoProfile -File tests\run.ps1
 # Keep this file to 5.1 syntax (no ??, ?. or ternaries) and plain ASCII.
 
+# This suite runs commands that fail on purpose, and Windows PowerShell 5.1
+# turns a native command's stderr into a NativeCommandError record. GitHub runs
+# a `shell: powershell` step with $ErrorActionPreference = 'stop', so the first
+# cca command that reported an error killed the whole run 88 assertions in, with
+# no FAIL line and no count to show for it. `2>$null` hides such a record but
+# does not stop 5.1 raising it, so the preference is the only lever. PowerShell
+# 7 does not promote native stderr this way, which is why this bites on the 5.1
+# runner and never locally. Assigning here shadows the caller's value for this
+# script alone, so the step's own 'stop' is back the moment the script ends.
+$ErrorActionPreference = 'Continue'
+
 $repo = Split-Path -Parent $PSScriptRoot
 $cca = Join-Path $repo 'cca.ps1'
 $shim = Join-Path (Join-Path (Join-Path $repo 'desktop') 'main') 'cca-shim.ps1'
@@ -59,10 +70,17 @@ function code($name, $want, $block) {
 }
 
 # Runs one command through desktop/main/cca-shim.ps1 in a child host, the only
-# path the desktop app ever uses. Returns @{ Code; Out } with stdout only.
+# path the desktop app ever uses, and the suite's only native invocation: the
+# one place the NativeCommandError trap above can show up. The catch turns a
+# surprise into a FAIL line instead of a dead run.
+# Returns @{ Code; Out } with stdout only.
 function shim($argv) {
-    $out = & $pshost -NoProfile -File $shim @argv 2>$null
-    @{ Code = $LASTEXITCODE; Out = @($out) }
+    try {
+        $out = & $pshost -NoProfile -File $shim @argv 2>$null
+        return @{ Code = $LASTEXITCODE; Out = @($out) }
+    } catch {
+        return @{ Code = "threw: $($_.Exception.Message)"; Out = @() }
+    }
 }
 
 # Every assertion the desktop app's reading of `cca list --json` rests on.
