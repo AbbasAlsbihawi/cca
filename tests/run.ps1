@@ -253,6 +253,73 @@ else { ok 'cca remove moved the account out' }
 $env:PATH = $oldpath
 Remove-Item Env:\CCA_STUB_EXIT -ErrorAction SilentlyContinue
 
+# ---- the signed-in check, against a stub whose `auth status` answers ----
+# A signed-out claude exits 1 from `auth status`; that must not leak out as
+# cca's own exit code, and the email left in .claude.json must not count as a login.
+$box = newbox
+. $cca
+$oldpath = $env:PATH
+$bin = Join-Path $box 'bin'
+New-Item -ItemType Directory -Force -Path $bin | Out-Null
+Set-Content -LiteralPath (Join-Path $bin 'claude.cmd') -Encoding ASCII -Value @(
+    '@echo off',
+    'if "%1 %2"=="auth status" goto status',
+    'echo ARGS=%*',
+    'exit /b 0',
+    ':status',
+    'if "%CCA_STUB_AUTH%"=="in" goto signedin',
+    'echo {"loggedIn":false}',
+    'exit /b 1',
+    ':signedin',
+    'echo {"loggedIn":true}',
+    'exit /b 0')
+$env:PATH = $bin + [IO.Path]::PathSeparator + $env:PATH
+Set-Content -LiteralPath $env:CCA_MAIN_JSON -Encoding ASCII -Value '{"oauthAccount":{"emailAddress":"me@example.com","organizationName":"Org"}}'
+Copy-Item -LiteralPath $cca -Destination (Join-Path $env:CCA_HOME 'cca.ps1')
+
+Remove-Item Env:\CCA_STUB_AUTH -ErrorAction SilentlyContinue
+$r = shim @('list', '--json')
+eq 'signed out: shim cca list --json exits 0' 0 $r.Code
+checkjson 'signed out: json' $r.Out
+if ($script:doc) {
+    eq 'signed out: a leftover email is not a login' $false @($script:doc.accounts)[0].loggedIn
+    eq 'signed out: no email is shown' $null @($script:doc.accounts)[0].email
+}
+$env:CCA_STUB_AUTH = 'in'
+checkjson 'signed in: json' (cca list --json)
+if ($script:doc) {
+    eq 'signed in: loggedIn' $true @($script:doc.accounts)[0].loggedIn
+    eq 'signed in: the email is shown' 'me@example.com' @($script:doc.accounts)[0].email
+}
+Remove-Item Env:\CCA_STUB_AUTH -ErrorAction SilentlyContinue
+$env:PATH = $oldpath
+
+# ---- account colours -----------------------------------------------------
+# Uses powershell.exe as the "Claude app", since any exe has an icon to tint.
+$box = newbox
+. $cca
+$env:CCA_CLAUDE_EXE = $pshost
+Copy-Item -LiteralPath $cca -Destination (Join-Path $env:CCA_HOME 'cca.ps1')
+
+checkjson 'colours: json before' (cca list --json)
+if ($script:doc) {
+    eq 'colours: nine to pick from' 9 @($script:doc.colors).Count
+    eq 'colours: none chosen yet' $null @($script:doc.accounts)[0].color
+}
+code 'colours: cca app with a colour exits 0' 0 { cca app default blue }
+checkjson 'colours: json after' (cca list --json)
+if ($script:doc) { eq 'colours: the colour is remembered' 'blue' @($script:doc.accounts)[0].color }
+if (Test-Path -LiteralPath (Join-Path $env:CCA_HOME 'icons\default.ico')) { ok 'colours: a tinted icon was written' }
+else { bad 'colours: a tinted icon was written' 'icons\default.ico' 'missing' }
+code 'colours: an unknown colour exits 1' 1 { cca app default plaid }
+code 'colours: cca app with no colour keeps the saved one' 0 { cca app default }
+checkjson 'colours: json kept' (cca list --json)
+if ($script:doc) { eq 'colours: still blue' 'blue' @($script:doc.accounts)[0].color }
+code 'colours: cca remove exits 0' 0 { cca remove default }
+if (Test-Path -LiteralPath (Join-Path $env:CCA_HOME 'colors\default.txt')) { bad 'colours: remove forgets the colour' 'gone' 'still there' }
+else { ok 'colours: remove forgets the colour' }
+Remove-Item Env:\CCA_CLAUDE_EXE -ErrorAction SilentlyContinue
+
 foreach ($b in $script:boxes) { Remove-Item -LiteralPath $b -Recurse -Force -ErrorAction SilentlyContinue }
 
 "$script:pass passed, $script:fail failed"

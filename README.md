@@ -40,7 +40,7 @@ Open a new PowerShell window afterwards. If PowerShell blocks your profile, run 
 The terminal commands work the same as on macOS: `add`, `login`, `use`, `bind`, `unbind`, `run`, `list`, `remove`, `backup`, `restore`, `autobackup` (a Task Scheduler job). Differences:
 
 - Shared files (`settings.json`, `skills`, ...) are linked with symlinks, falling back to junctions and hard links. Turn on Developer Mode in Windows settings for full symlink support.
-- `cca app <name>` makes a Start menu shortcut, with no icon colour. `cca open <name>` starts the desktop app with its own `--user-data-dir`. The app is looked for in the usual install folders; set `CCA_CLAUDE_EXE` to its `Claude.exe` if it is elsewhere. The desktop part is untested on a real install.
+- `cca app <name> [color]` makes a Start menu shortcut. With a colour (red, orange, yellow, green, teal, blue, purple, pink, gray) the shortcut gets a tinted Claude icon, and the desktop app shows the colour as a dot next to the account. The tint is on the shortcut; Windows may still show the plain Claude icon on a running window in the taskbar. `cca open <name>` starts the desktop app with its own `--user-data-dir`. The app is looked for in the usual install folders; set `CCA_CLAUDE_EXE` to its `Claude.exe` if it is elsewhere. The desktop part is untested on a real install.
 - `cca import` is not available; `cca restore` also pulls sessions from the main Claude app.
 - Removed accounts go to the Recycle Bin.
 

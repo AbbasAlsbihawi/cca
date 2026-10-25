@@ -263,13 +263,43 @@ function Invoke-CcaRun($a) {
     Invoke-CcaClaude $a[0] @($a | Select-Object -Skip 1)
 }
 
+# Asks Claude Code itself whether this account is signed in. A new config folder can
+# carry another account's email in .claude.json before any login, so the email alone
+# proves nothing. Returns $true or $false, or $null when claude cannot tell
+# (not installed, or an old version without `auth status`).
+function Test-CcaLoggedIn([string]$name) {
+    $c = Get-Command claude -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $c) { return $null }
+    $old = [Environment]::GetEnvironmentVariable('CLAUDE_CONFIG_DIR')
+    $oldPref = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    [Environment]::SetEnvironmentVariable('CLAUDE_CONFIG_DIR', (Get-CcaDir $name))
+    # `claude auth status` exits 1 when signed out; that must not become cca's own exit code.
+    $oldExit = $global:LASTEXITCODE
+    try {
+        $out = & $c.Source auth status 2>$null | Out-String
+        $j = $out | ConvertFrom-Json
+        if ($null -eq $j.loggedIn) { return $null }
+        return [bool]$j.loggedIn
+    } catch { return $null }
+    finally {
+        [Environment]::SetEnvironmentVariable('CLAUDE_CONFIG_DIR', $old)
+        $ErrorActionPreference = $oldPref
+        $global:LASTEXITCODE = $oldExit
+    }
+}
+
+# The email and organisation of a signed-in account, or $null when it is not signed in.
 function Get-CcaEmail([string]$name) {
     $dir = Get-CcaDir $name
     $json = if ($dir) { Join-Path $dir '.claude.json' } else { $script:CCA_MAIN_JSON }
     if (Test-Path -LiteralPath $json) {
         try {
             $o = (Get-Content -LiteralPath $json -Raw | ConvertFrom-Json).oauthAccount
-            if ($o.emailAddress) { return [pscustomobject]@{ Email = $o.emailAddress; Org = $o.organizationName } }
+            if ($o.emailAddress) {
+                if ((Test-CcaLoggedIn $name) -eq $false) { return $null }
+                return [pscustomobject]@{ Email = $o.emailAddress; Org = $o.organizationName }
+            }
         } catch {}
     }
     $null
@@ -286,7 +316,7 @@ function Show-CcaList {
 }
 
 # Everything `cca list --json` reports, as one JSON object (same shape as cca.zsh).
-# On Windows `color` is always null and `colors` is [] (the app icon cannot be tinted).
+# `color` is the account's saved colour (or null) and `colors` the ones cca app can tint with.
 function Show-CcaListJson {
     $default = Get-CcaDefaultName
     $binds = @(Get-CcaBindings)
@@ -303,14 +333,14 @@ function Show-CcaListJson {
         $accts += [ordered]@{
             name = [string]$name; isDefault = ($name -ceq $default)
             email = $email; org = $org; loggedIn = [bool]$email
-            color = $null; app = $app
+            color = (Get-CcaColor $name); app = $app
             running = $running; folders = $folders
         }
     }
     $auto = $false
     try { $auto = [bool](Get-ScheduledTask -TaskName 'cca-backup' -ErrorAction SilentlyContinue) } catch {}
     $doc = [ordered]@{
-        version = 1; default = [string]$default; colors = @()
+        version = 1; default = [string]$default; colors = @($script:CCA_COLORS)
         autobackup = $auto; snapshots = @(Get-CcaSnapshots | ForEach-Object { [string]$_ }); accounts = $accts
     }
     $json = ConvertTo-Json -InputObject $doc -Depth 6 -Compress
@@ -411,11 +441,180 @@ function Get-CcaLauncherPath([string]$name) {
     Join-Path $dir "Claude $title.lnk"
 }
 
+# ---- account colours ----------------------------------------------------
+# The colour is kept in ~\.claude-accounts\colors\<name>.txt, so the desktop app can show
+# it as a dot whether or not a launcher exists. `cca app` also tints the launcher icon.
+
+$script:CCA_COLORS = @('red', 'orange', 'yellow', 'green', 'teal', 'blue', 'purple', 'pink', 'gray')
+$script:CCA_HUES = @{ red = 0; orange = 30; yellow = 50; green = 140; teal = 178; blue = 215; purple = 275; pink = 330 }
+
+function Get-CcaColor([string]$name) {
+    $f = Join-Path $script:CCA_HOME "colors\$name.txt"
+    if (-not (Test-Path -LiteralPath $f)) { return $null }
+    $c = (Get-Content -LiteralPath $f -Raw).Trim()
+    if ($script:CCA_COLORS -contains $c) { $c } else { $null }
+}
+
+function Save-CcaColor([string]$name, [string]$color) {
+    $dir = Join-Path $script:CCA_HOME 'colors'
+    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    Write-CcaFile (Join-Path $dir "$name.txt") "$color`n"
+}
+
+# Compiled on first use, not when the profile loads: it takes about a second.
+function Initialize-CcaTint {
+    if ('CcaTint' -as [type]) { return }
+    Add-Type -ReferencedAssemblies 'System.Drawing' -TypeDefinition @'
+using System;
+using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
+using System.IO;
+using System.Runtime.InteropServices;
+
+public static class CcaTint {
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    static extern uint PrivateExtractIcons(string file, int index, int cx, int cy, IntPtr[] icons, uint[] ids, uint count, uint flags);
+    [DllImport("user32.dll")]
+    static extern bool DestroyIcon(IntPtr h);
+
+    // The first icon of an exe at about `size` pixels, as a 32-bit bitmap; null if there is none.
+    public static Bitmap Load(string exe, int size) {
+        IntPtr[] h = new IntPtr[1];
+        uint[] id = new uint[1];
+        uint n = PrivateExtractIcons(exe, 0, size, size, h, id, 1, 0);
+        if (n == 0 || n == 0xFFFFFFFF || h[0] == IntPtr.Zero) return null;
+        try {
+            using (Icon ic = Icon.FromHandle(h[0])) {
+                Bitmap src = ic.ToBitmap();
+                Bitmap dst = new Bitmap(src.Width, src.Height, PixelFormat.Format32bppArgb);
+                using (Graphics g = Graphics.FromImage(dst)) { g.DrawImage(src, 0, 0, src.Width, src.Height); }
+                return dst;
+            }
+        } finally { DestroyIcon(h[0]); }
+    }
+
+    static void ToHsv(double r, double g, double b, out double h, out double s, out double v) {
+        double max = Math.Max(r, Math.Max(g, b)), min = Math.Min(r, Math.Min(g, b)), d = max - min;
+        v = max;
+        s = max <= 0 ? 0 : d / max;
+        if (d <= 0) { h = 0; return; }
+        if (max == r) h = 60 * (((g - b) / d) % 6);
+        else if (max == g) h = 60 * ((b - r) / d + 2);
+        else h = 60 * ((r - g) / d + 4);
+        if (h < 0) h += 360;
+    }
+
+    static void FromHsv(double h, double s, double v, out double r, out double g, out double b) {
+        double c = v * s, x = c * (1 - Math.Abs((h / 60) % 2 - 1)), m = v - c;
+        double rr = 0, gg = 0, bb = 0;
+        if (h < 60) { rr = c; gg = x; }
+        else if (h < 120) { rr = x; gg = c; }
+        else if (h < 180) { gg = c; bb = x; }
+        else if (h < 240) { gg = x; bb = c; }
+        else if (h < 300) { rr = x; bb = c; }
+        else { rr = c; bb = x; }
+        r = rr + m; g = gg + m; b = bb + m;
+    }
+
+    // Turns the icon's main colour into `targetHue`; with gray, drops the colour instead.
+    // The near-white spark and any grey pixels keep their look.
+    public static void Recolor(Bitmap bmp, double targetHue, bool gray) {
+        Rectangle rect = new Rectangle(0, 0, bmp.Width, bmp.Height);
+        BitmapData data = bmp.LockBits(rect, ImageLockMode.ReadWrite, PixelFormat.Format32bppArgb);
+        int len = Math.Abs(data.Stride) * bmp.Height;
+        byte[] px = new byte[len];
+        Marshal.Copy(data.Scan0, px, 0, len);
+        double sx = 0, sy = 0;
+        for (int i = 0; i < len; i += 4) {
+            if (px[i + 3] < 200) continue;
+            double h, s, v;
+            ToHsv(px[i + 2] / 255.0, px[i + 1] / 255.0, px[i] / 255.0, out h, out s, out v);
+            if (s < 0.35 || v < 0.3) continue;
+            sx += Math.Cos(h * Math.PI / 180) * s; sy += Math.Sin(h * Math.PI / 180) * s;
+        }
+        double tile = (sx == 0 && sy == 0) ? 20 : Math.Atan2(sy, sx) * 180 / Math.PI;
+        double delta = targetHue - tile;
+        for (int i = 0; i < len; i += 4) {
+            if (px[i + 3] == 0) continue;
+            double h, s, v, r, g, b;
+            ToHsv(px[i + 2] / 255.0, px[i + 1] / 255.0, px[i] / 255.0, out h, out s, out v);
+            if (gray) { s = 0; }
+            else if (s > 0.08) { h = ((h + delta) % 360 + 360) % 360; }
+            else continue;
+            FromHsv(h, s, v, out r, out g, out b);
+            px[i + 2] = (byte)Math.Round(r * 255); px[i + 1] = (byte)Math.Round(g * 255); px[i] = (byte)Math.Round(b * 255);
+        }
+        Marshal.Copy(px, 0, data.Scan0, len);
+        bmp.UnlockBits(data);
+    }
+
+    static byte[] Png(Bitmap src, int size) {
+        using (Bitmap b = new Bitmap(size, size, PixelFormat.Format32bppArgb)) {
+            using (Graphics g = Graphics.FromImage(b)) {
+                g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                g.SmoothingMode = SmoothingMode.HighQuality;
+                g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+                g.DrawImage(src, 0, 0, size, size);
+            }
+            using (MemoryStream ms = new MemoryStream()) { b.Save(ms, ImageFormat.Png); return ms.ToArray(); }
+        }
+    }
+
+    // Writes an .ico with 256, 48, 32 and 16 pixel PNG frames.
+    public static void WriteIco(Bitmap master, string path) {
+        int[] sizes = new int[] { 256, 48, 32, 16 };
+        byte[][] frames = new byte[sizes.Length][];
+        for (int i = 0; i < sizes.Length; i++) frames[i] = Png(master, sizes[i]);
+        using (FileStream fs = new FileStream(path, FileMode.Create))
+        using (BinaryWriter w = new BinaryWriter(fs)) {
+            w.Write((short)0); w.Write((short)1); w.Write((short)sizes.Length);
+            int offset = 6 + 16 * sizes.Length;
+            for (int i = 0; i < sizes.Length; i++) {
+                w.Write((byte)(sizes[i] == 256 ? 0 : sizes[i])); w.Write((byte)(sizes[i] == 256 ? 0 : sizes[i]));
+                w.Write((byte)0); w.Write((byte)0); w.Write((short)1); w.Write((short)32);
+                w.Write(frames[i].Length); w.Write(offset);
+                offset += frames[i].Length;
+            }
+            for (int i = 0; i < sizes.Length; i++) w.Write(frames[i]);
+        }
+    }
+}
+'@
+}
+
+# Makes ~\.claude-accounts\icons\<name>.ico: the Claude icon in the account's colour.
+# Returns the path, or $null (and says why) when it cannot, so the launcher keeps the plain icon.
+function New-CcaIcon([string]$exe, [string]$name, [string]$color) {
+    $bmp = $null
+    try {
+        Initialize-CcaTint
+        $bmp = [CcaTint]::Load($exe, 256)
+        if (-not $bmp) { Write-CcaErr "could not read the icon of $exe; kept the plain icon"; return $null }
+        if ($color -eq 'gray') { [CcaTint]::Recolor($bmp, 0, $true) }
+        else { [CcaTint]::Recolor($bmp, [double]$script:CCA_HUES[$color], $false) }
+        $dir = Join-Path $script:CCA_HOME 'icons'
+        New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        $ico = Join-Path $dir "$name.ico"
+        [CcaTint]::WriteIco($bmp, $ico)
+        return $ico
+    } catch {
+        Write-CcaErr "could not tint the icon $color, kept the plain icon ($($_.Exception.Message))"
+        return $null
+    } finally {
+        if ($bmp) { $bmp.Dispose() }
+    }
+}
+
 # Makes a Start Menu shortcut "Claude <Name>" that runs `cca open <name>`.
 function Invoke-CcaApp($a) {
     $name = if ($a.Count) { $a[0] } else { '' }
-    if (-not (Test-CcaValid $name)) { Write-CcaFail 'usage: cca app <name>'; return }
-    if ($a.Count -gt 1) { Write-CcaErr 'colour tinting is not available on Windows; the plain Claude icon is used' }
+    if (-not (Test-CcaValid $name)) { Write-CcaFail 'usage: cca app <name> [color]'; return }
+    $color = if ($a.Count -gt 1) { [string]$a[1] } else { '' }
+    if ($color -and $script:CCA_COLORS -cnotcontains $color) {
+        Write-CcaFail "unknown color '$color'. Colors: $($script:CCA_COLORS -join ', ')"
+        return
+    }
     $exe = Get-CcaClaudeApp
     if (-not $exe) { Write-CcaFail 'could not find the Claude desktop app. Set CCA_CLAUDE_EXE to its Claude.exe path.'; return }
     if (-not (Test-CcaExists $name)) { New-CcaAccount $name; if ($script:CCA_FAILED) { return } }
@@ -425,7 +624,11 @@ function Invoke-CcaApp($a) {
     $s = $sh.CreateShortcut($lnk)
     $s.TargetPath = (Get-Process -Id $PID).Path
     $s.Arguments = "-NoProfile -WindowStyle Hidden -Command `". '$($script:CCA_HOME)\cca.ps1'; cca open $name`""
-    $s.IconLocation = "$exe,0"
+    # No colour given: keep the one saved for this account.
+    if ($color) { Save-CcaColor $name $color } else { $color = Get-CcaColor $name }
+    $icon = $null
+    if ($color) { $icon = New-CcaIcon $exe $name $color }
+    $s.IconLocation = if ($icon) { "$icon,0" } else { "$exe,0" }
     $s.Description = "cca:$name"
     $s.WindowStyle = 7
     $s.Save()
@@ -476,6 +679,9 @@ function Invoke-CcaRemove($a) {
     Save-CcaBindings @(Get-CcaBindings | Where-Object { $_.Name -cne $name })
     $lnk = Get-CcaLauncherPath $name
     if (Test-Path -LiteralPath $lnk) { Move-CcaToTrash $lnk }
+    foreach ($f in @((Join-Path $script:CCA_HOME "colors\$name.txt"), (Join-Path $script:CCA_HOME "icons\$name.ico"))) {
+        Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue
+    }
     if ($data -and (Test-Path -LiteralPath $data)) { Move-CcaToTrash $data }
     if ($dir -and (Test-Path -LiteralPath $dir)) { Move-CcaToTrash $dir }
     if ($global:CCA_ACCOUNT -ceq $name) { Remove-Variable -Name CCA_ACCOUNT -Scope Global -ErrorAction SilentlyContinue }
@@ -715,7 +921,8 @@ cca - switch Claude Code between accounts (Windows)
   cca unbind [folder]        remove a folder binding
   cca run <name> [args]      run claude once with an account
   cca list [--json]          list accounts with their emails (--json: for scripts and the desktop app)
-  cca app <name>             make a 'Claude <Name>' Start menu shortcut for the desktop app
+  cca app <name> [color]     make a 'Claude <Name>' Start menu shortcut for the desktop app
+                             (colors: red orange yellow green teal blue purple pink gray)
   cca open <name>            open the Claude desktop app for an account (or bring it to the front)
   cca remove <name>          log out an account; move its folders and launcher to the Recycle Bin
   cca backup [--quiet|list]  save every account's conversations (keeps the newest 30)
