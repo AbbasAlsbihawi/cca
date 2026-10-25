@@ -2,6 +2,8 @@
 import { colorCss } from './sidebar.js';
 import { logError } from './output.js';
 
+const IS_WINDOWS = /Windows/i.test(navigator.userAgent);
+
 function field(label, input) {
   const d = document.createElement('div');
   d.className = 'field';
@@ -36,12 +38,14 @@ export function openAddSheet(sheet, colors, close) {
   const go = document.createElement('button'); go.textContent = 'Add in Terminal'; go.className = 'primary';
   go.disabled = true;
   // Same rule as cca: lowercase letters, digits, - and _, starting with a letter or digit.
+  // Windows only: the macOS interface keeps its old behaviour.
   const NAME_RE = /^[a-z0-9][a-z0-9_-]*$/;
   const hint = document.createElement('div');
   hint.className = 'muted';
   hint.textContent = 'Name: lowercase letters, digits, - and _ only.';
   name.addEventListener('input', () => {
     const v = name.value.trim();
+    if (!IS_WINDOWS) { go.disabled = !v; return; }
     go.disabled = !NAME_RE.test(v);
     hint.style.color = v && !NAME_RE.test(v) ? '#ff6b6b' : '';
   });
@@ -53,7 +57,7 @@ export function openAddSheet(sheet, colors, close) {
     go.disabled = true;
     try {
       const res = await window.cca.interactive(args);
-      if (res && res.ok === false) {
+      if (IS_WINDOWS && res && res.ok === false) {
         logError('add failed: ' + (res.error || 'the terminal did not start'));
         go.disabled = false;
         return;
@@ -71,6 +75,6 @@ export function openAddSheet(sheet, colors, close) {
   const actions = document.createElement('div');
   actions.className = 'sheet-actions';
   actions.append(cancel, go);
-  sheet.append(h, field('Name', name), hint, field('Email', email), field('SSO', ssoWrap), field('Colour', col), note, actions);
+  sheet.append(h, field('Name', name), ...(IS_WINDOWS ? [hint] : []), field('Email', email), field('SSO', ssoWrap), field('Colour', col), note, actions);
   name.focus();
 }

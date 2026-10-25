@@ -35,7 +35,7 @@ export function renderDetail(root, a, ctx) {
   const interactive = async (args) => {
     try {
       const res = await window.cca.interactive(args);
-      if (res && res.ok === false) logError('terminal failed: ' + (res.error || 'did not start'));
+      if (/Windows/i.test(navigator.userAgent) && res && res.ok === false) logError('terminal failed: ' + (res.error || 'did not start'));
     } catch (e) { logError('interactive failed: ' + ((e && e.message) || e)); }
   };
 
