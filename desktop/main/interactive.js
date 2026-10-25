@@ -41,14 +41,26 @@ function openMacScript(lines) {
   });
 }
 
-function spawnDetached(file, argv, env) {
+// On Windows `detached` means DETACHED_PROCESS: PowerShell gets no console and exits
+// at once without running the script, so only detach elsewhere. With watchExit, a
+// child that exits within a second and a half counts as a failed start; the windows
+// we open with -NoExit stay up, while `cmd /c start` exits at once by design.
+function spawnDetached(file, argv, env, watchExit) {
   return new Promise((resolve) => {
     let p;
+    let settled = false;
+    const done = (r) => { if (!settled) { settled = true; resolve(r); } };
     try {
-      p = spawn(file, argv, { detached: true, stdio: 'ignore', windowsHide: false, env: env || process.env });
-    } catch (err) { resolve({ ok: false, error: err.message }); return; }
-    p.on('error', (err) => resolve({ ok: false, error: err.message }));
-    p.on('spawn', () => { p.unref(); resolve({ ok: true }); });
+      p = spawn(file, argv, { detached: process.platform !== 'win32', stdio: 'ignore', windowsHide: false, env: env || process.env });
+    } catch (err) { done({ ok: false, error: err.message }); return; }
+    p.on('error', (err) => done({ ok: false, error: err.message }));
+    if (watchExit) {
+      p.on('exit', (code) => done({ ok: false, error: `the terminal closed straight away (exit code ${code})` }));
+    }
+    p.on('spawn', () => {
+      p.unref();
+      if (watchExit) setTimeout(() => done({ ok: true }), 1500); else done({ ok: true });
+    });
   });
 }
 
@@ -87,7 +99,7 @@ async function runInteractive(args, onChanged) {
   } else if (process.platform === 'win32') {
     // Spawned directly, with no cmd.exe/start hop, so an account name is never re-parsed by a shell.
     res = await spawnDetached('powershell.exe', ['-NoExit', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', shimPath(), ...args],
-      { ...process.env, CCA_HOME: ccaHome() });
+      { ...process.env, CCA_HOME: ccaHome() }, true);
   } else {
     return { ok: false, error: `unsupported platform ${process.platform}` };
   }

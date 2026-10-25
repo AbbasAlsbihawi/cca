@@ -33,7 +33,10 @@ export function renderDetail(root, a, ctx) {
     return b;
   };
   const interactive = async (args) => {
-    try { await window.cca.interactive(args); } catch (e) { logError('interactive failed: ' + ((e && e.message) || e)); }
+    try {
+      const res = await window.cca.interactive(args);
+      if (res && res.ok === false) logError('terminal failed: ' + (res.error || 'did not start'));
+    } catch (e) { logError('interactive failed: ' + ((e && e.message) || e)); }
   };
 
   const actions = el('div', 'actions');

@@ -263,13 +263,40 @@ function Invoke-CcaRun($a) {
     Invoke-CcaClaude $a[0] @($a | Select-Object -Skip 1)
 }
 
+# Asks Claude Code itself whether this account is signed in. A new config folder can
+# carry another account's email in .claude.json before any login, so the email alone
+# proves nothing. Returns $true or $false, or $null when claude cannot tell
+# (not installed, or an old version without `auth status`).
+function Test-CcaLoggedIn([string]$name) {
+    $c = Get-Command claude -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $c) { return $null }
+    $old = [Environment]::GetEnvironmentVariable('CLAUDE_CONFIG_DIR')
+    $oldPref = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    [Environment]::SetEnvironmentVariable('CLAUDE_CONFIG_DIR', (Get-CcaDir $name))
+    try {
+        $out = & $c.Source auth status 2>$null | Out-String
+        $j = $out | ConvertFrom-Json
+        if ($null -eq $j.loggedIn) { return $null }
+        return [bool]$j.loggedIn
+    } catch { return $null }
+    finally {
+        [Environment]::SetEnvironmentVariable('CLAUDE_CONFIG_DIR', $old)
+        $ErrorActionPreference = $oldPref
+    }
+}
+
+# The email and organisation of a signed-in account, or $null when it is not signed in.
 function Get-CcaEmail([string]$name) {
     $dir = Get-CcaDir $name
     $json = if ($dir) { Join-Path $dir '.claude.json' } else { $script:CCA_MAIN_JSON }
     if (Test-Path -LiteralPath $json) {
         try {
             $o = (Get-Content -LiteralPath $json -Raw | ConvertFrom-Json).oauthAccount
-            if ($o.emailAddress) { return [pscustomobject]@{ Email = $o.emailAddress; Org = $o.organizationName } }
+            if ($o.emailAddress) {
+                if ((Test-CcaLoggedIn $name) -eq $false) { return $null }
+                return [pscustomobject]@{ Email = $o.emailAddress; Org = $o.organizationName }
+            }
         } catch {}
     }
     $null
