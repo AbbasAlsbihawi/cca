@@ -88,12 +88,16 @@ _cca_exec() {
   dir=$(_cca_dir "$1") || { _cca_err "no account '$1'. See: cca list"; return 1 }
   shift
   if [[ -n $dir ]]; then
+    _cca_link_shared $dir
     env CLAUDE_CONFIG_DIR=$dir "$@"
   else
     env -u CLAUDE_CONFIG_DIR "$@"
   fi
 }
 
+# Links what the default account shares (CCA_SHARED) into an account's folder.
+# It runs before each start, so a file added to ~/.claude later reaches every
+# account. A file the account has of its own is kept.
 _cca_link_shared() {
   emulate -L zsh
   local item
@@ -104,12 +108,23 @@ _cca_link_shared() {
 }
 
 # A new account starts with the same MCP servers and theme as the default one.
+# If Claude wrote the account's .claude.json first, it has no mcpServers yet:
+# add them then. An account that has the key keeps what it has.
 _cca_seed_config() {
-  [[ -e $1/.claude.json || ! -r $CCA_MAIN_JSON ]] && return 0
+  local f=$1/.claude.json
+  [[ -r $CCA_MAIN_JSON ]] || return 0
   (( $+commands[jq] )) || return 0
+  if [[ ! -e $f ]]; then
+    ( umask 077
+      jq '{mcpServers: (.mcpServers // {})} + (if .theme then {theme: .theme} else {} end)' \
+        $CCA_MAIN_JSON > $f ) || rm -f $f
+    return 0
+  fi
+  jq -e 'type == "object" and (has("mcpServers") | not)' $f >/dev/null 2>&1 || return 0
   ( umask 077
-    jq '{mcpServers: (.mcpServers // {})} + (if .theme then {theme: .theme} else {} end)' \
-      $CCA_MAIN_JSON > $1/.claude.json ) || rm -f $1/.claude.json
+    jq --slurpfile main $CCA_MAIN_JSON '. + {mcpServers: ($main[0].mcpServers // {})}' $f > $f.cca-tmp ) \
+    && mv -f $f.cca-tmp $f || rm -f $f.cca-tmp
+  return 0
 }
 
 # Makes the config folder for a new account, without logging in.
@@ -148,7 +163,7 @@ _cca_login() {
   fi
   shift
   local dir=$(_cca_dir $name)
-  [[ -n $dir ]] && _cca_link_shared $dir
+  [[ -n $dir ]] && _cca_seed_config $dir
   _cca_backup --quiet >/dev/null 2>&1 || :
   print -r -- "Signing in '$name'. If the browser is signed in to another Claude account, switch it there first."
   _cca_exec $name claude auth login "$@"
@@ -269,6 +284,8 @@ _cca_open() {
     open -n -a $CCA_CLAUDE_APP
   else
     mkdir -p $data && chmod 700 $CCA_HOME/desktop $data || return 1
+    _cca_link_shared $CCA_HOME/profiles/$name
+    _cca_seed_config $CCA_HOME/profiles/$name
     open -n -a $CCA_CLAUDE_APP --env CLAUDE_CONFIG_DIR=$CCA_HOME/profiles/$name --args --user-data-dir=$data
   fi
 }
@@ -408,6 +425,7 @@ _cca_app() {
   print -r -- "Made: $dest"
   if [[ $name != "$(_cca_default_name)" && ! -d $CCA_HOME/desktop/$name ]]; then
     print -r -- "First sign-in: quit every Claude window (Cmd+Q), open 'Claude ${(C)name}', sign in, then reopen the others."
+    print -r -- "Connectors (MCP servers) need the same, or sign them in from the terminal: cca run $name, then /mcp."
   fi
 }
 
@@ -748,6 +766,136 @@ _cca_autobackup() {
   esac
 }
 
+# Prints "name<TAB>pid" for each account whose Claude app copy is open.
+_cca_instances() {
+  emulate -L zsh
+  local name pid
+  for name in ${(f)"$(_cca_profiles)"}; do
+    pid=$(_cca_app_pid $name) && print -r -- "$name"$'\t'"$pid"
+  done
+  return 0
+}
+
+# Asks one copy of the Claude app to quit, as Cmd+Q does, and waits up to $2
+# seconds (default 60). Fails if it is still open, e.g. the quit was cancelled.
+_cca_quit_pid() {
+  emulate -L zsh
+  local pid=$1 i
+  osascript -l JavaScript - $pid >/dev/null 2>&1 <<'JS'
+ObjC.import('AppKit');
+function run(argv) {
+  var app = $.NSRunningApplication.runningApplicationWithProcessIdentifier(Number(argv[0]));
+  if (!app.isNil()) app.terminate;
+}
+JS
+  for (( i = 0; i < ${2:-60}; i++ )); do
+    kill -0 $pid 2>/dev/null || return 0
+    sleep 1
+  done
+  ! kill -0 $pid 2>/dev/null
+}
+
+_cca_app_version() {
+  plutil -extract CFBundleVersion raw -o - $CCA_CLAUDE_APP/Contents/Info.plist 2>/dev/null
+}
+
+# Every copy runs the one Claude.app, which updates itself in place. Copies
+# open during an update keep the old version until they restart, and the
+# updater reopens only the default account, even when another copy installed
+# the update. `cca update` quits and reopens every open copy. `--auto` (the
+# autoupdate job) records which copies are open; once the version changes it
+# restarts the copies open before, reopens the ones that closed for the
+# update, and closes the default copy the updater opened in their place.
+_cca_update() {
+  emulate -L zsh
+  local state=$CCA_HOME/app-state ver old line name default=$(_cca_default_name)
+  local -a now before restart reopen
+  ver=$(_cca_app_version) || { _cca_err "could not read the version of $CCA_CLAUDE_APP"; return 1 }
+  now=(${(f)"$(_cca_instances)"})
+  if [[ $1 != --auto ]]; then
+    restart=($now)
+  elif [[ -r $state ]]; then
+    before=(${(f)"$(<$state)"})
+    old=$before[1]
+    before=($before[2,-1])
+  fi
+  if [[ -n $old && $old != "$ver" ]]; then
+    for line in $before; do
+      if (( ${now[(Ie)$line]} )); then
+        restart+=($line)
+      elif [[ -z ${(M)now:#${line%%$'\t'*}$'\t'*} ]]; then
+        reopen+=(${line%%$'\t'*})
+      fi
+    done
+    line=${(M)now:#$default$'\t'*}
+    if (( $#reopen )) && [[ -n $line && -z ${(M)before:#$default$'\t'*} ]]; then
+      _cca_quit_pid ${line#*$'\t'} && print -r -- "Closed the '$default' copy the updater opened"
+    fi
+  fi
+  for line in $restart; do
+    name=${line%%$'\t'*}
+    if _cca_quit_pid ${line#*$'\t'}; then
+      reopen+=($name)
+    else
+      _cca_err "'$name' did not quit, so it still runs the old version"
+    fi
+  done
+  for name in ${(u)reopen}; do
+    _cca_exists $name && _cca_open $name && print -r -- "Opened '$name' on Claude $ver"
+  done
+  ( umask 077; { print -r -- $ver; _cca_instances } > $state )
+}
+
+# Turns the autoupdate job (launchd) on or off. It runs `cca update --auto`
+# every minute and whenever the folder holding Claude.app changes.
+_cca_autoupdate() {
+  emulate -L zsh
+  local plist=$CCA_LAUNCH_AGENTS/dev.cca.update.plist home=${CCA_HOME:A} app=${CCA_CLAUDE_APP:A} cmd watch
+  case $1 in
+    on)
+      mkdir -p $CCA_LAUNCH_AGENTS $home && chmod 700 $home || return 1
+      watch=${app:h}
+      cmd="source ${(q)home}/cca.zsh && cca update --auto"
+      cmd=${cmd//&/&amp;} cmd=${cmd//</&lt;} home=${home//&/&amp;} home=${home//</&lt;}
+      app=${app//&/&amp;} app=${app//</&lt;} watch=${watch//&/&amp;} watch=${watch//</&lt;}
+      print -r -- '<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>dev.cca.update</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string><string>-f</string><string>-c</string>
+    <string>'$cmd'</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>CCA_HOME</key><string>'$home'</string>
+    <key>CCA_CLAUDE_APP</key><string>'$app'</string>
+  </dict>
+  <key>WatchPaths</key>
+  <array><string>'$watch'</string></array>
+  <key>StartInterval</key><integer>60</integer>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>'$home'/autoupdate.log</string>
+  <key>StandardErrorPath</key><string>'$home'/autoupdate.log</string>
+</dict>
+</plist>' > $plist || return 1
+      _cca_launchctl bootout gui/$UID $plist >/dev/null 2>&1
+      _cca_launchctl bootstrap gui/$UID $plist || { _cca_err "launchctl could not load $plist"; return 1 }
+      print -r -- "Autoupdate on: after the Claude app updates, the open copies restart on the new version." ;;
+    off)
+      _cca_launchctl bootout gui/$UID $plist >/dev/null 2>&1
+      rm -f $plist
+      print -r -- "Autoupdate off." ;;
+    status)
+      print -r -- "Autoupdate: $([[ -f $plist ]] && print on || print off). Claude app: $(_cca_app_version || print unknown)" ;;
+    *)
+      _cca_err "usage: cca autoupdate on|off|status"
+      return 1 ;;
+  esac
+}
+
 # Prints one field of the oauthAccount in a .claude.json: _cca_oauth <file> <field>.
 _cca_oauth() {
   [[ -r $1 ]] && (( $+commands[jq] )) || return 0
@@ -867,6 +1015,8 @@ _cca_help() {
   cca restore <name> [snap] [-n] [--account <uuid>]
                              bring an account's conversations back (never overwrites; -n: dry run)
   cca autobackup on|off|status   a daily backup at 13:00
+  cca update                 quit and reopen every open Claude app copy, so each runs the installed version
+  cca autoupdate on|off|status   do that by itself after the Claude app updates
 
 Order: cca use > folder binding > default account (~/.claude).
 Set CCA_QUIET=1 to hide the line 'claude' prints about the account."
@@ -901,6 +1051,8 @@ cca() {
     backup)         _cca_backup "$@" ;;
     restore)        _cca_restore "$@" ;;
     autobackup)     _cca_autobackup "$@" ;;
+    update)         _cca_update "$@" ;;
+    autoupdate)     _cca_autoupdate "$@" ;;
     help|-h|--help) _cca_help ;;
     *)              _cca_err "unknown command '$cmd'"; _cca_help; return 1 ;;
   esac
@@ -925,7 +1077,7 @@ claude() {
 }
 
 _cca_complete() {
-  local -a cmds=(status list add login use bind unbind run app open remove backup restore autobackup help)
+  local -a cmds=(status list add login use bind unbind run app open remove backup restore autobackup update autoupdate help)
   if (( CURRENT == 2 )); then
     compadd -a cmds
   elif (( CURRENT == 3 )); then
@@ -933,7 +1085,7 @@ _cca_complete() {
       login|use|bind|run|app|open|remove|restore) compadd -- ${(f)"$(_cca_profiles)"} ;;
       list|ls)            compadd -- --json ;;
       backup)             compadd -- list --quiet ;;
-      autobackup)         compadd -- on off status ;;
+      autobackup|autoupdate) compadd -- on off status ;;
       unbind)             _files -/ ;;
     esac
   elif (( CURRENT == 4 )) && [[ $words[2] == bind ]]; then
