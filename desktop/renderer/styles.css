@@ -15,6 +15,7 @@ input[type=text]{font:inherit;color:var(--fg);background:var(--bg);border:1px so
 select{font:inherit;color:var(--fg);background:var(--btn);border:1px solid var(--line);border-radius:6px;padding:4px}
 #toolbar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--panel);border-bottom:1px solid var(--line)}
 .toggle{display:flex;align-items:center;gap:4px;margin:0 4px}
+.toggle[hidden]{display:none}
 #panes{flex:1;display:flex;min-height:0}
 #sidebar{width:240px;overflow:auto;background:var(--side);border-right:1px solid var(--line);padding:6px}
 #detail{flex:1;overflow:auto;padding:20px 24px}

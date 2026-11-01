@@ -511,6 +511,10 @@ mkdir -p $LA; touch $LA/dev.cca.backup.plist
 eq "json: autobackup on when the plist exists" true "$(jrun 'cca list --json' | jq -r .autobackup)"
 rm -f $LA/dev.cca.backup.plist
 eq "json: autobackup off again" false "$(jrun 'cca list --json' | jq -r .autobackup)"
+eq "json: autoupdate off" false "$(jf .autoupdate)"
+touch $LA/dev.cca.update.plist
+eq "json: autoupdate on when the plist exists" true "$(jrun 'cca list --json' | jq -r .autoupdate)"
+rm -f $LA/dev.cca.update.plist
 eq "ls --json matches list --json" "$J" "$(jrun 'cca ls --json')"
 eq "list stays plain without --json" \
   "$(printf '%s %-14s %s\n' '*' work 'main@co.com  (Co)' ' ' other 'not logged in' ' ' personal 'q"u\ote@x.com  (Org)')" \

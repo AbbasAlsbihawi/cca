@@ -960,7 +960,7 @@ _cca_list_json() {
     accts+=",\"running\":$(_cca_app_pid $name >/dev/null 2>&1 && print true || print false),\"folders\":$(_cca_jarr $folders)}"
     sep=,
   done
-  print -r -- "{\"version\":1,\"default\":$(_cca_jstr $default),\"colors\":$(_cca_jarr $_CCA_COLORS),\"autobackup\":$([[ -f $CCA_LAUNCH_AGENTS/dev.cca.backup.plist ]] && print true || print false),\"snapshots\":$(_cca_jarr ${(f)"$(_cca_snapshots 2>/dev/null)"}),\"accounts\":[$accts]}"
+  print -r -- "{\"version\":1,\"default\":$(_cca_jstr $default),\"colors\":$(_cca_jarr $_CCA_COLORS),\"autobackup\":$([[ -f $CCA_LAUNCH_AGENTS/dev.cca.backup.plist ]] && print true || print false),\"autoupdate\":$([[ -f $CCA_LAUNCH_AGENTS/dev.cca.update.plist ]] && print true || print false),\"snapshots\":$(_cca_jarr ${(f)"$(_cca_snapshots 2>/dev/null)"}),\"accounts\":[$accts]}"
 }
 
 _cca_list() {
