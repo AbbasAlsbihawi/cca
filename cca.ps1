@@ -118,6 +118,7 @@ function Invoke-CcaAs([string]$name, [scriptblock]$block) {
     if (-not (Test-CcaExists $name)) { Write-CcaFail "no account '$name'. See: cca list"; return }
     $old = [Environment]::GetEnvironmentVariable('CLAUDE_CONFIG_DIR')
     $dir = Get-CcaDir $name
+    if ($dir) { Sync-CcaShared $dir }
     [Environment]::SetEnvironmentVariable('CLAUDE_CONFIG_DIR', $dir)
     try { & $block } finally { [Environment]::SetEnvironmentVariable('CLAUDE_CONFIG_DIR', $old) }
 }
@@ -146,6 +147,8 @@ function New-CcaLink([string]$link, [string]$target) {
     } catch { return $false }
 }
 
+# Links what the default account shares into an account's folder. It runs before
+# each start, so a file added to .claude later reaches every account.
 function Sync-CcaShared([string]$dir) {
     foreach ($item in $script:CCA_SHARED) {
         $src = Join-Path $script:CCA_MAIN_DIR $item
@@ -158,10 +161,29 @@ function Sync-CcaShared([string]$dir) {
     }
 }
 
+# If Claude wrote the account's .claude.json first, it has no mcpServers yet: add them.
+# The key goes in as text, so the rest of the file stays exactly as Claude wrote it.
+function Add-CcaMcpServers([string]$dst) {
+    $tmp = "$dst.cca-tmp"
+    try {
+        $text = Get-Content -LiteralPath $dst -Raw
+        $cur = $text | ConvertFrom-Json
+        if ($cur -isnot [Management.Automation.PSCustomObject] -or $cur.PSObject.Properties['mcpServers']) { return }
+        $j = Get-Content -LiteralPath $script:CCA_MAIN_JSON -Raw | ConvertFrom-Json
+        $servers = if ($j.mcpServers) { $j.mcpServers | ConvertTo-Json -Depth 20 -Compress } else { '{}' }
+        $sep = if (@($cur.PSObject.Properties).Count) { ',' } else { '' }
+        $new = ([regex]'^\s*\{').Replace($text, "{`"mcpServers`":$servers$sep", 1)
+        $null = $new | ConvertFrom-Json
+        Write-CcaFile $tmp $new
+        Move-Item -LiteralPath $tmp -Destination $dst -Force
+    } catch { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }
+}
+
 # A new account starts with the same MCP servers and theme as the default one.
 function Initialize-CcaConfig([string]$dir) {
     $dst = Join-Path $dir '.claude.json'
-    if ((Test-Path -LiteralPath $dst) -or -not (Test-Path -LiteralPath $script:CCA_MAIN_JSON)) { return }
+    if (-not (Test-Path -LiteralPath $script:CCA_MAIN_JSON)) { return }
+    if (Test-Path -LiteralPath $dst) { Add-CcaMcpServers $dst; return }
     try {
         $j = Get-Content -LiteralPath $script:CCA_MAIN_JSON -Raw | ConvertFrom-Json
         $o = [ordered]@{ mcpServers = $(if ($j.mcpServers) { $j.mcpServers } else { @{} }) }
@@ -202,7 +224,7 @@ function Invoke-CcaLogin($a) {
         return
     }
     $dir = Get-CcaDir $name
-    if ($dir) { Sync-CcaShared $dir }
+    if ($dir) { Initialize-CcaConfig $dir }
     # The safety backup must not fail the login; cca.zsh throws its status away too.
     $failed = $script:CCA_FAILED
     try { Invoke-CcaBackup @('--quiet') | Out-Null } catch {}
@@ -429,7 +451,9 @@ function Invoke-CcaOpen($a) {
     if (-not $data) { Start-Process -FilePath $exe; return }
     New-Item -ItemType Directory -Force -Path $data | Out-Null
     if (-not (Test-Path -LiteralPath $data -PathType Container)) { Write-CcaFail "could not make $data"; return }
-    $old = [Environment]::GetEnvironmentVariable('CLAUDE_CONFIG_DIR')
+    Sync-CcaShared (Join-Path $script:CCA_HOME "profiles\$name")
+    Initialize-CcaConfig (Join-Path $script:CCA_HOME "profiles\$name")
+    $old =[Environment]::GetEnvironmentVariable('CLAUDE_CONFIG_DIR')
     [Environment]::SetEnvironmentVariable('CLAUDE_CONFIG_DIR', (Join-Path $script:CCA_HOME "profiles\$name"))
     try { Start-Process -FilePath $exe -ArgumentList "--user-data-dir=`"$data`"" }
     finally { [Environment]::SetEnvironmentVariable('CLAUDE_CONFIG_DIR', $old) }
@@ -637,6 +661,7 @@ function Invoke-CcaApp($a) {
     if ($name -cne $default -and -not (Test-Path -LiteralPath (Join-Path $script:CCA_HOME "desktop\$name"))) {
         $t = (Get-Culture).TextInfo.ToTitleCase($name)
         Write-Host "First sign-in: quit every Claude window, open 'Claude $t', sign in, then reopen the others."
+        Write-Host "Connectors (MCP servers) need the same, or sign them in from the terminal: cca run $name, then /mcp."
     }
 }
 

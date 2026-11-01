@@ -3,6 +3,10 @@
 # Usage: zsh tests/run.sh
 
 REPO=${${(%):-%x}:A:h:h}
+# cca keeps any CCA_* it inherits, and Claude Code exports CCA_HOME. Drop them
+# all, so cca falls back to the throwaway HOME below and not the real accounts.
+unset -m 'CCA_*'
+unset CLAUDE_CONFIG_DIR
 T=$(mktemp -d) || exit 1
 T=${T:A}
 trap 'rm -rf "$T"' EXIT INT TERM
@@ -40,6 +44,12 @@ run() {
 }
 
 mode() { stat -f %Lp $1 }
+
+# Stop before any test if cca would still reach a folder outside the throwaway HOME.
+mk_home
+for out in "${(@f)$(run 'print -rl -- $CCA_HOME $CCA_MAIN_DIR $CCA_MAIN_JSON $CCA_MAIN_APP_DATA $CCA_LAUNCH_AGENTS')}"; do
+  [[ $out == $H/* ]] || { print -ru2 -- "tests: cca would use $out, outside the throwaway HOME; stopping"; exit 1 }
+done
 
 # 1. syntax and sourcing
 mk_home
@@ -131,6 +141,18 @@ eq "ls alias matches list" "$(run 'cca list')" "$(run 'cca ls')"
 # 9. run
 mk_home; prof personal
 eq "cca run uses profile" "CFG=$A/profiles/personal ARGS=--version" "$(run 'cca run personal --version')"
+# A file added to ~/.claude after the account was made reaches it on the next start.
+mk_home; prof personal
+P=$A/profiles/personal
+mkdir $H/.claude/agents
+print -r -- mine > $P/CLAUDE.md
+run 'cca run personal' >/dev/null
+eq "run links a shared folder added later" $H/.claude/agents "$(readlink $P/agents)"
+eq "run links the other shared items" $H/.claude/settings.json "$(readlink $P/settings.json)"
+eq "run keeps the account's own CLAUDE.md" mine "$(<$P/CLAUDE.md)"
+mk_home; prof personal
+run 'cca use personal; claude x' >/dev/null
+eq "claude links shared items" $H/.claude/skills "$(readlink $A/profiles/personal/skills)"
 
 # 10. inside Claude Code
 mk_home
@@ -152,6 +174,7 @@ eq "open personal -> front its pid" "FRONT 222" "$(run "$STUBS"$'\n''cca open pe
 eq "open not running account launches app" \
   "OPEN -n -a /Applications/Claude.app --env CLAUDE_CONFIG_DIR=$A/profiles/other --args --user-data-dir=$A/desktop/other" \
   "$(run "$STUBS"$'\n''cca open other')"
+eq "open links shared items" $H/.claude/settings.json "$(readlink $A/profiles/other/settings.json)"
 eq "open default when not running" "OPEN -n -a /Applications/Claude.app" \
   "$(run "$STUBS"$'\n''ps() { :; }'$'\n''cca open work')"
 
@@ -393,6 +416,47 @@ yes "autobackup off exits 0" $rc
 has "autobackup off: bootout called" "LAUNCHCTL bootout gui/$(id -u) $PL" "$(<$T/launchctl.log)"
 has "autobackup status: off" "Autobackup: off" "$(run "$CTX"$'\n''cca autobackup status')"
 out=$(run "$CTX"$'\n''cca autobackup maybe'); no "autobackup: bad argument refused" $?
+
+# 19b. update and autoupdate
+rm -rf $LA $T/launchctl.log
+out=$(run "$CTX"$'\n''cca autoupdate on'); rc=$?
+yes "autoupdate on exits 0" $rc
+PL=$LA/dev.cca.update.plist
+[[ -f $PL ]] && ok "autoupdate on: plist written" || bad "autoupdate on: plist written" "$PL" "missing"
+has "autoupdate plist: runs update --auto" "source $A/cca.zsh &amp;&amp; cca update --auto" "$(<$PL)"
+has "autoupdate plist: watches the folder of Claude.app" "<array><string>/Applications</string></array>" "$(<$PL)"
+has "autoupdate plist: every minute" "<key>StartInterval</key><integer>60</integer>" "$(<$PL)"
+plutil -lint $PL >/dev/null 2>&1; yes "autoupdate plist is valid" $?
+has "autoupdate on: bootstrap called" "LAUNCHCTL bootstrap gui/$(id -u) $PL" "$(<$T/launchctl.log)"
+has "autoupdate status: on" "Autoupdate: on" "$(run "$CTX"$'\n''cca autoupdate status')"
+out=$(run "$CTX"$'\n''cca autoupdate off'); rc=$?
+yes "autoupdate off exits 0" $rc
+[[ ! -e $PL ]] && ok "autoupdate off: plist removed" || bad "autoupdate off: plist removed" "gone" "still there"
+out=$(run "$CTX"$'\n''cca autoupdate maybe'); no "autoupdate: bad argument refused" $?
+# The app version, the open copies, quitting and opening are stubbed.
+UP="$CTX"'
+_cca_app_version() { cat $T/ver }
+_cca_instances() { cat $T/now }
+_cca_quit_pid() { print -r -- "QUIT $1" }
+_cca_open() { print -r -- "OPEN $1" }'
+rm -f $A/app-state
+print -r -- 1 > $T/ver; print -r -- $'personal\t11' > $T/now
+eq "update --auto: first run only records" "" "$(run "$UP"$'\n''cca update --auto')"
+eq "update --auto: records the version and open copies" $'1\npersonal\t11' "$(<$A/app-state)"
+eq "update --auto: same version does nothing" "" "$(run "$UP"$'\n''cca update --auto')"
+print -r -- 2 > $T/ver; print -r -- $'work\t99' > $T/now
+eq "update --auto: swaps the updater's default copy for the copy that closed" \
+  $'QUIT 99\nClosed the \'work\' copy the updater opened\nOPEN personal\nOpened \'personal\' on Claude 2' \
+  "$(run "$UP"$'\n''cca update --auto')"
+print -rl -- 2 $'work\t12' $'personal\t11' > $A/app-state
+print -r -- 3 > $T/ver; print -rl -- $'work\t12' $'personal\t11' > $T/now
+eq "update --auto: restarts the copies open before the update" \
+  $'QUIT 12\nQUIT 11\nOPEN work\nOpened \'work\' on Claude 3\nOPEN personal\nOpened \'personal\' on Claude 3' \
+  "$(run "$UP"$'\n''cca update --auto')"
+print -r -- $'personal\t11' > $T/now
+eq "update: restarts every open copy" $'QUIT 11\nOPEN personal\nOpened \'personal\' on Claude 3' "$(run "$UP"$'\n''cca update')"
+eq "update: a copy that does not quit is not reopened" "cca: 'personal' did not quit, so it still runs the old version" \
+  "$(run "$UP"$'\n''_cca_quit_pid() { return 1 }; cca update')"
 
 # 20. remove and login back up first
 rm -rf $BK

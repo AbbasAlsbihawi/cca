@@ -242,6 +242,12 @@ $seen = (cca run extra a b 6>$null) -join "`n"
 has 'cca run points CLAUDE_CONFIG_DIR at the account' "CFG=$extra" $seen
 has 'cca run passes the arguments through' 'ARGS=a b' $seen
 
+# A file added to the main folder after the account was made reaches it on the next start.
+New-Item -ItemType Directory -Force -Path (Join-Path $env:CCA_MAIN_DIR 'agents') | Out-Null
+cca run extra 6>$null | Out-Null
+if (Get-Item -LiteralPath (Join-Path $extra 'agents') -Force -ErrorAction SilentlyContinue) { ok 'cca run links a shared folder added later' }
+else { bad 'cca run links a shared folder added later' 'a link' 'missing' }
+
 $env:CCA_STUB_EXIT = '3'
 $r = shim @('run', 'extra', 'x')
 eq 'shim: cca run hands back the exit code of the tool' 3 $r.Code

@@ -11,7 +11,7 @@ cca is unofficial and not affiliated with Anthropic.
 - macOS and zsh
 - Claude Code CLI (`claude`)
 - Claude desktop app, for the desktop part only
-- jq (optional): copies your MCP servers into new accounts
+- jq (optional): copies your MCP servers into new accounts, and into an account that has none yet
 
 ## Install
 
@@ -99,6 +99,8 @@ The terminal commands work the same as on macOS: `add`, `login`, `use`, `bind`, 
 | `cca backup [--quiet\|list]` | save every account's conversations; `list` shows the snapshots |
 | `cca restore <name> [snapshot] [-n] [--account <uuid>]` | bring an account's conversations back, without overwriting anything (`-n`: dry run) |
 | `cca autobackup on\|off\|status` | a daily backup at 13:00 |
+| `cca update` | quit and reopen every open Claude app copy, so each runs the installed version (macOS) |
+| `cca autoupdate on\|off\|status` | do that by itself after the Claude app updates (macOS) |
 
 ## Which account `claude` uses
 
@@ -132,9 +134,32 @@ First sign-in:
 
 The sign-in link returns through `claude://`. If two copies are open, it can reach the wrong one.
 
+Connectors (MCP servers) sign in the same way, and each account keeps its own sign-ins. To sign one in while other copies stay open, use the terminal, which does not use `claude://`:
+
+```sh
+cca run personal
+```
+
+Then type `/mcp`, pick the server and sign in. The account's Claude app uses it from its next conversation.
+
 macOS asks once for permission to let the launcher control System Events. Allow it. The launcher uses this to bring the right window forward.
 
 Each desktop copy uses its own data folder, `~/.claude-accounts/desktop/<name>`. Its Code tab uses the config folder of that account.
+
+### Updates
+
+Every copy runs the one `/Applications/Claude.app`, which updates itself. Copies that are open during an update keep the old version until they restart. The updater reopens only the default account's copy, even when another copy installed the update.
+
+```sh
+cca autoupdate on
+```
+
+This adds a launchd job that looks once a minute, and whenever `/Applications` changes. After an update it:
+
+- quits each copy that was open, as Cmd+Q does, and opens it again on the new version. If work is running, Claude may ask first.
+- reopens the copy that closed to install the update, and closes the default copy the updater opened in its place.
+
+macOS may ask once for permission to control Claude. Allow it, or the copies cannot be restarted. The log is `~/.claude-accounts/autoupdate.log`. `cca autoupdate off` turns it off. To restart every open copy once by hand: `cca update`.
 
 ## Desktop app
 
@@ -163,10 +188,16 @@ These are shared with `~/.claude` through symlinks:
 - `settings.json`, `CLAUDE.md`, skills, plugins
 - `agents`, `commands`, `output-styles`, `keybindings.json`, if present
 
+So a plugin or skill installed from one account is there in all of them.
+
+cca adds any missing link each time an account starts (`claude`, `cca run`, `cca open`), so a file you add to `~/.claude` later, such as `CLAUDE.md` or `agents`, reaches every account. A file an account has of its own is kept.
+
 These stay separate for each account:
 
 - chat history
 - memory
+- connector sign-ins, and MCP servers added with `claude mcp add`
+- in the desktop app's Chat tab: skills and connectors set up on claude.ai, and desktop extensions
 
 ## Files
 
@@ -176,6 +207,7 @@ These stay separate for each account:
 - `~/.claude-accounts/profiles/<name>/`: config folder of each account
 - `~/.claude-accounts/desktop/<name>/`: data folder of each desktop copy
 - `~/.claude-accounts/backups/`: backup snapshots
+- `~/.claude-accounts/app-state`, `autoupdate.log`: the Claude version and open copies `cca update` saw last, and the autoupdate log
 - `~/Applications/Claude <Name>.app`: desktop launchers
 - one line in `~/.zshrc` that loads `cca.zsh`
 
