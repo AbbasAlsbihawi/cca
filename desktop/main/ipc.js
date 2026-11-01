@@ -4,7 +4,7 @@ const { app, dialog, ipcMain } = require('electron');
 const { runCca, listAccounts, bus } = require('./cca');
 const { runInteractive } = require('./interactive');
 
-const RUN_VERBS = new Set(['open', 'app', 'bind', 'unbind', 'backup', 'autobackup', 'remove', 'restore']);
+const RUN_VERBS = new Set(['open', 'app', 'bind', 'unbind', 'backup', 'autobackup', 'autoupdate', 'remove', 'restore']);
 
 function isArgs(a) {
   return Array.isArray(a) && a.every((x) => typeof x === 'string');

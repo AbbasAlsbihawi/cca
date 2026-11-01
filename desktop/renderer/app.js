@@ -29,6 +29,10 @@ function render() {
     });
   }
   $('chk-autobackup').checked = !!(state.data && state.data.autobackup);
+  // Only cca.zsh reports autoupdate: Windows and an older cca have no such command.
+  const autoupdate = state.data && state.data.autoupdate;
+  $('autoupdate').hidden = typeof autoupdate !== 'boolean';
+  $('chk-autoupdate').checked = !!autoupdate;
 }
 
 function openRestore(name) {
@@ -67,10 +71,12 @@ async function init() {
   $('btn-add').addEventListener('click', openAdd);
   $('btn-backup').addEventListener('click', (e) => withBusy(e.currentTarget, () => runLogged(['backup'])));
   $('btn-refresh').addEventListener('click', (e) => withBusy(e.currentTarget, refresh));
-  $('chk-autobackup').addEventListener('change', (e) => withBusy(e.currentTarget, async () => {
-    await runLogged(['autobackup', e.currentTarget.checked ? 'on' : 'off']);
-    await refresh();
-  }));
+  for (const verb of ['autobackup', 'autoupdate']) {
+    $('chk-' + verb).addEventListener('change', (e) => withBusy(e.currentTarget, async () => {
+      await runLogged([verb, e.currentTarget.checked ? 'on' : 'off']);
+      await refresh();
+    }));
+  }
   $('sheet-backdrop').addEventListener('mousedown', (e) => { if (e.target === $('sheet-backdrop')) closeSheet(); });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheet(); });
 

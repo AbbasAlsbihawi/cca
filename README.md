@@ -175,7 +175,7 @@ The window lists your accounts. For each account you can:
 - remove the account, after a confirm
 - bind and unbind folders
 
-For all accounts you can add an account, take a backup now, turn the daily autobackup on or off, and see the snapshots.
+For all accounts you can add an account, take a backup now, turn the daily autobackup on or off, and see the snapshots. On macOS you can also turn autoupdate on or off (see [Updates](#updates)).
 
 The app calls `cca`, so the terminal and the app always agree. Install `cca` first with `./install.sh` (`.\install.ps1` on Windows). `cca list --json` prints the accounts, folders and snapshots as JSON, which is what the app reads.
 
