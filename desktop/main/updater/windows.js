@@ -19,15 +19,17 @@ function wire(win, send) {
 
   autoUpdater.on('checking-for-update', () => send({ state: 'checking' }));
 
+  let version; // progress events do not carry it
   autoUpdater.on('update-available', (info) => {
-    send({ state: 'available', version: info && info.version });
+    version = info && info.version;
+    send({ state: 'available', version });
   });
 
   autoUpdater.on('update-not-available', () => send({ state: 'none' }));
 
   autoUpdater.on('download-progress', (p) => {
-    const pct = p && Number.isFinite(p.percent) ? Math.round(p.percent) : 0;
-    send({ state: 'downloading', message: `${pct}%` });
+    const pct = p && Number.isFinite(p.percent) ? Math.floor(p.percent) : 0;
+    send({ state: 'downloading', version, percent: pct, transferred: p && p.transferred, total: p && p.total });
   });
 
   // Status only, never a dialog: a failed check is not the user's problem.

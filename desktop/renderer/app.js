@@ -97,21 +97,42 @@ async function init() {
   if (window.cca.onUpdateStatus) {
     // `state` is an internal name ('none', 'ready', ...); the user gets a sentence or
     // nothing at all. `message` is kept only where it says something they can act on:
-    // the percentage while downloading, and the reason on an error or an arch mismatch.
-    // The toolbar already shows the running version, so it is not repeated here.
+    // the reason on an error or an arch mismatch. The toolbar already shows the
+    // running version, so it is not repeated here.
+    const mb = (n) => Math.round(n / 1e6); // as Finder counts them
     const updateText = (s) => {
       if (!s || !s.state) return '';
       const v = s.version ? ' ' + s.version : '';
       switch (s.state) {
         case 'available': return 'Update' + v + ' available';
-        case 'downloading': return 'Downloading update' + v + (s.message ? ' ' + s.message : '...');
+        case 'downloading': {
+          if (!Number.isFinite(s.percent)) return 'Downloading update' + v + '...';
+          const size = s.total > 0 && s.transferred >= 0 ? ` (${mb(s.transferred)} of ${mb(s.total)} MB)` : '';
+          // Short enough to fit beside the bar in the default window width.
+          return 'Downloading' + v + ': ' + s.percent + '%' + size;
+        }
+        case 'unpacking': return 'Unpacking update' + v + '...';
         case 'ready': return 'Update' + v + ' ready - restart to install';
         case 'error': return s.message || 'Could not check for updates';
         case 'checking': return '';
         default: return s.message || '';
       }
     };
-    window.cca.onUpdateStatus((s) => { $('update-status').textContent = updateText(s); });
+    // The bar shows only while an update is on its way; unpacking has no
+    // percentage, so the bar runs without a value then.
+    const updateBar = (s) => {
+      const bar = $('update-progress');
+      const state = s && s.state;
+      bar.hidden = state !== 'downloading' && state !== 'unpacking';
+      if (state === 'downloading' && Number.isFinite(s.percent)) bar.value = s.percent;
+      else bar.removeAttribute('value');
+    };
+    window.cca.onUpdateStatus((s) => {
+      const text = updateText(s);
+      $('update-status').textContent = text;
+      $('update-status').title = text;
+      updateBar(s);
+    });
   }
   window.addEventListener('focus', () => { refresh(); schedule(); });
   window.addEventListener('blur', schedule);

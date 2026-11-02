@@ -148,7 +148,7 @@ async function download(asset, dir, version, send) {
     if (got > MAX_ZIP_BYTES) { res.destroy(new Error('download is far larger than any release')); return; }
     if (!expected) return;
     const pct = Math.min(100, Math.floor((got / expected) * 100));
-    if (pct !== shown) { shown = pct; send({ state: 'downloading', version, message: `${pct}%` }); }
+    if (pct !== shown) { shown = pct; send({ state: 'downloading', version, percent: pct, transferred: got, total: expected }); }
   });
   await pipeline(res, fs.createWriteStream(zip));
 
@@ -367,7 +367,7 @@ async function checkForUpdates(win, send) {
     work = fs.mkdtempSync(path.join(os.tmpdir(), 'cca-update-'));
     const zip = await download(asset, work, version, send);
 
-    send({ state: 'downloading', version, message: 'Unpacking' });
+    send({ state: 'unpacking', version });
     const out = path.join(work, 'unpacked');
     fs.mkdirSync(out, { recursive: true });
     await ditto(zip, out);
