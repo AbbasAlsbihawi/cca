@@ -178,7 +178,7 @@ The window lists your accounts. For each account you can:
 
 For all accounts you can add an account, take a backup now, turn the daily autobackup on or off, and see the snapshots. On macOS you can also turn autoupdate on or off, and *Restart Claude* quits and reopens every open copy, as `cca update` does (see [Updates](#updates)). A restart also gives an account the default account's MCP servers if it has none yet.
 
-The app calls `cca`, so the terminal and the app always agree. Install `cca` first with `./install.sh` (`.\install.ps1` on Windows). `cca list --json` prints the accounts, folders and snapshots as JSON, which is what the app reads.
+The app calls `cca`, so the terminal and the app always agree. On macOS, install `cca` first with `./install.sh`. On Windows the app installs its own copy when it starts; run `.\install.ps1` as well if you want the `cca` command in PowerShell. `cca list --json` prints the accounts, folders and snapshots as JSON, which is what the app reads.
 
 ## How it works
 

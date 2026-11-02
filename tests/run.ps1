@@ -219,6 +219,13 @@ $r = shim @('list', '--json')
 eq 'shim: cca list --json exits 0' 0 $r.Code
 checkjson 'shim json' $r.Out
 
+# The desktop app runs before anyone has installed cca: this used to exit 0 with
+# empty stdout, which the app showed as "Unexpected end of JSON input".
+$box = newbox
+$r = shim @('list', '--json')
+eq 'shim: a missing cca.ps1 exits non-zero' 1 $r.Code
+eq 'shim: a missing cca.ps1 prints nothing to stdout' 0 @($r.Out).Count
+
 # ---- whose exit code wins, against a stub claude ------------------------
 # `cca run` hands back the exit code of the tool it ran, while the logout that
 # `cca remove` runs on its way out has its code thrown away. Both are on

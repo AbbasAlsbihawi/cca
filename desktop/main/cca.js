@@ -2,6 +2,7 @@
 // Bridge to the cca CLI. Every call spawns with an argv array: no shell, no
 // command string, so account names and folder paths are never interpreted.
 const { spawn } = require('child_process');
+const crypto = require('crypto');
 const { EventEmitter } = require('events');
 const fs = require('fs');
 const os = require('os');
@@ -43,6 +44,33 @@ function shimPath() {
   }
   shimCache = out;
   return out;
+}
+
+// Windows: the installer carries cca.ps1, so the app works without install.ps1.
+// Puts it in CCA_HOME when it is missing, and refreshes it after an app update only
+// if this app wrote it: a copy from install.ps1 or edited by hand stays as it is.
+// A failure is not fatal here; the shim reports the missing file on the first command.
+function ensureCli() {
+  if (process.platform !== 'win32') return;
+  const sha = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
+  const readOr = (file, fallback) => {
+    try { return fs.readFileSync(file); } catch (e) { return fallback; }
+  };
+  try {
+    const { app } = require('electron');
+    const src = fs.readFileSync(app.isPackaged
+      ? path.join(process.resourcesPath, 'cli', 'cca.ps1')
+      : path.join(__dirname, '..', '..', 'cca.ps1'));
+    const dst = path.join(ccaHome(), 'cca.ps1');
+    const mark = path.join(ccaHome(), 'cca.ps1.app-sha256');
+    const have = readOr(dst, null);
+    if (have && (sha(have) === sha(src) || sha(have) !== String(readOr(mark, '')))) return;
+    fs.mkdirSync(path.join(ccaHome(), 'profiles'), { recursive: true });
+    fs.writeFileSync(dst, src);
+    fs.writeFileSync(mark, sha(src));
+  } catch (err) {
+    console.error(`could not install cca.ps1: ${err && err.message || err}`);
+  }
 }
 
 function command(args) {
@@ -103,10 +131,11 @@ async function listAccounts() {
   try {
     const r = await runCca(['list', '--json']);
     if (r.code !== 0) return { ok: false, error: r.stderr.trim() || `cca list exited with ${r.code}` };
+    if (!r.stdout.trim()) return { ok: false, error: r.stderr.trim() || 'cca list printed nothing' };
     return { ok: true, data: JSON.parse(r.stdout) };
   } catch (err) {
     return { ok: false, error: String(err && err.message || err) };
   }
 }
 
-module.exports = { runCca, listAccounts, ccaHome, localBin, shimPath, bus };
+module.exports = { runCca, listAccounts, ccaHome, localBin, shimPath, ensureCli, bus };

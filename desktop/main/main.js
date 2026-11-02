@@ -1,6 +1,7 @@
 'use strict';
 const path = require('path');
 const { BrowserWindow, app, shell } = require('electron');
+const { ensureCli } = require('./cca');
 const { registerIpc } = require('./ipc');
 const { buildAppMenu } = require('./menu');
 const { createTray } = require('./tray');
@@ -62,6 +63,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on('activate', showWindow);
 
   app.whenReady().then(() => {
+    ensureCli();
     createWindow();
     registerIpc(win);
     buildAppMenu({ win, showWindow });

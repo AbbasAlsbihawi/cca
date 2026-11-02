@@ -76,7 +76,13 @@
           ]
         }
       ],
-      "signAndEditExecutable": false
+      "signAndEditExecutable": false,
+      "extraResources": [
+        {
+          "from": "../cca.ps1",
+          "to": "cli/cca.ps1"
+        }
+      ]
     },
     "nsis": {
       "oneClick": false,
