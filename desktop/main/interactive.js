@@ -5,9 +5,9 @@ const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { ccaHome, listAccounts, shimPath } = require('./cca');
+const { ccaHome, listAccounts, localBin, shimPath } = require('./cca');
 
-const INTERACTIVE_VERBS = new Set(['add', 'login']);
+const INTERACTIVE_VERBS = new Set(['add', 'login', 'mcp']);
 const NAME_RE = /^[a-z0-9][a-z0-9_-]*$/;
 const POLL_MS = 2000;
 const POLL_FOR_MS = 120000;
@@ -21,7 +21,7 @@ function openMacScript(lines) {
     const body = [
       '#!/bin/zsh -f', 'rm -f -- "$0"', 'unset CLAUDECODE',
       `export CCA_HOME=${q(ccaHome())}`,
-      `export PATH=${q((process.env.PATH || '/usr/bin:/bin') + ':/opt/homebrew/bin:/usr/local/bin')}`,
+      `export PATH=${q((process.env.PATH || '/usr/bin:/bin') + `:${localBin()}:/opt/homebrew/bin:/usr/local/bin`)}`,
       ...lines,
     ];
     try {
@@ -51,7 +51,8 @@ function spawnDetached(file, argv, env, watchExit) {
     let settled = false;
     const done = (r) => { if (!settled) { settled = true; resolve(r); } };
     try {
-      p = spawn(file, argv, { detached: process.platform !== 'win32', stdio: 'ignore', windowsHide: false, env: env || process.env });
+      // Start in the home folder, not the app's install folder, which Claude would ask to trust.
+      p = spawn(file, argv, { detached: process.platform !== 'win32', stdio: 'ignore', windowsHide: false, env: env || process.env, cwd: os.homedir() });
     } catch (err) { done({ ok: false, error: err.message }); return; }
     p.on('error', (err) => done({ ok: false, error: err.message }));
     if (watchExit) {
@@ -86,6 +87,12 @@ async function runInteractive(args, onChanged) {
   }
   if (args[0] === 'shell') return args.length === 2 ? openShell(args[1]) : { ok: false, error: 'usage: shell <name>' };
   if (!INTERACTIVE_VERBS.has(args[0])) return { ok: false, error: 'verb not allowed' };
+  // `mcp <name>` starts Claude on that account at its /mcp list. A sign-in made in a
+  // terminal returns to localhost, not claude://, so it works while other copies are open.
+  if (args[0] === 'mcp') {
+    if (args.length !== 2 || !NAME_RE.test(args[1])) return { ok: false, error: 'usage: mcp <name>' };
+    args = ['run', args[1], '/mcp'];
+  }
 
   // Take the baseline list before the terminal can change anything.
   const baseline = await listAccounts();

@@ -17,6 +17,11 @@ function ccaHome() {
   return process.env.CCA_HOME || path.join(os.homedir(), '.claude-accounts');
 }
 
+// Where Claude's own installer puts `claude`.
+function localBin() {
+  return path.join(os.homedir(), '.local', 'bin');
+}
+
 // PowerShell cannot read a script from inside app.asar, so use the unpacked
 // copy when there is one, else copy the shim next to the app data.
 let shimCache = null;
@@ -50,7 +55,7 @@ function command(args) {
     };
   }
   // A GUI-launched app gets a bare PATH; add where jq, python3 and claude usually live.
-  const extra = ['/opt/homebrew/bin', '/usr/local/bin'];
+  const extra = [localBin(), '/opt/homebrew/bin', '/usr/local/bin'];
   const have = (process.env.PATH || '/usr/bin:/bin:/usr/sbin:/sbin').split(':');
   const PATH = [...have, ...extra.filter((p) => !have.includes(p))].join(':');
   return {
@@ -60,7 +65,7 @@ function command(args) {
   };
 }
 
-function runCca(args) {
+function runCca(args, timeoutMs = TIMEOUT_MS) {
   return new Promise((resolve) => {
     if (!Array.isArray(args) || !args.every((a) => typeof a === 'string' && !a.includes('\0'))) {
       resolve({ code: -1, stdout: '', stderr: 'invalid arguments' });
@@ -79,7 +84,7 @@ function runCca(args) {
     const timer = setTimeout(() => {
       try { child.kill('SIGKILL'); } catch (e) { /* already gone */ }
       finish({ code: -1, stdout, stderr: 'timed out' });
-    }, TIMEOUT_MS);
+    }, timeoutMs);
     try {
       const c = command(args);
       child = spawn(c.file, c.argv, { env: c.env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -104,4 +109,4 @@ async function listAccounts() {
   }
 }
 
-module.exports = { runCca, listAccounts, ccaHome, shimPath, bus };
+module.exports = { runCca, listAccounts, ccaHome, localBin, shimPath, bus };

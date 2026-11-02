@@ -4,7 +4,10 @@ const { app, dialog, ipcMain } = require('electron');
 const { runCca, listAccounts, bus } = require('./cca');
 const { runInteractive } = require('./interactive');
 
-const RUN_VERBS = new Set(['open', 'app', 'bind', 'unbind', 'backup', 'autobackup', 'autoupdate', 'remove', 'restore']);
+const RUN_VERBS = new Set(['open', 'app', 'bind', 'unbind', 'backup', 'autobackup', 'autoupdate', 'update', 'remove', 'restore']);
+// `update` waits up to a minute for each open Claude copy to quit; killing it half way
+// would leave the copies it already quit closed.
+const SLOW_MS = { update: 15 * 60 * 1000 };
 
 function isArgs(a) {
   return Array.isArray(a) && a.every((x) => typeof x === 'string');
@@ -21,7 +24,7 @@ function registerIpc(win) {
 
   ipcMain.handle('cca:run', async (_e, args) => {
     if (!isArgs(args) || !RUN_VERBS.has(args[0])) return { code: -1, stdout: '', stderr: 'verb not allowed' };
-    const r = await runCca(args);
+    const r = await runCca(args, SLOW_MS[args[0]]);
     if (r.code === 0) changed();
     return r;
   });
