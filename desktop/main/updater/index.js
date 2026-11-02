@@ -16,9 +16,19 @@ function reason(err) {
   return (err && (err.message || String(err))) || 'unknown error';
 }
 
+// The Dock (macOS) or taskbar (Windows) icon shows the download too, so it can be
+// followed with the window hidden. Any other state removes the bar.
+function showProgress(win, payload) {
+  let value = -1;
+  if (payload.state === 'downloading' && Number.isFinite(payload.percent)) value = payload.percent / 100;
+  else if (payload.state === 'unpacking') value = 1; // the download is done
+  win.setProgressBar(value);
+}
+
 function send(win, payload) {
   try {
     if (!win || win.isDestroyed()) return;
+    try { showProgress(win, payload); } catch (e) { /* the icon is extra; the window still gets told */ }
     const wc = win.webContents;
     if (wc && !wc.isDestroyed()) wc.send('update:status', payload);
   } catch (e) { /* the window went away mid-check: no one left to tell */ }
