@@ -42,11 +42,14 @@ export function renderDetail(root, a, ctx) {
   const actions = el('div', 'actions');
   const open = act('Open Claude app', () => runLogged(['open', a.name]), 'primary');
   open.disabled = !a.app;
+  const mcp = act('Sign in to MCP…', () => interactive(['mcp', a.name]));
+  mcp.title = 'Opens Claude for this account in Terminal, at its list of MCP servers. A sign-in made there reaches this account even while other Claude copies are open.';
   actions.append(
     open,
     act(a.app ? 'Remake app' : 'Make app', () => runLogged(['app', a.name, a.color || colors[0] || ''].filter(Boolean))),
     act('New Terminal', () => interactive(['shell', a.name])),
     act('Log in again', () => interactive(['login', a.name])),
+    mcp,
     act('Restore…', async () => ctx.openRestore(a.name)),
   );
   const rm = act('Remove', async () => {

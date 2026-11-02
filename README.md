@@ -140,7 +140,7 @@ Connectors (MCP servers) sign in the same way, and each account keeps its own si
 cca run personal
 ```
 
-Then type `/mcp`, pick the server and sign in. The account's Claude app uses it from its next conversation.
+Then type `/mcp`, pick the server and sign in. The account's Claude app uses it from its next conversation. In the desktop app, *Sign in to MCP…* does the same: it opens Terminal with Claude on that account at its `/mcp` list.
 
 macOS asks once for permission to let the launcher control System Events. Allow it. The launcher uses this to bring the right window forward.
 
@@ -171,11 +171,12 @@ The window lists your accounts. For each account you can:
 - pick a colour for its icon
 - open a New Terminal that uses the account
 - log in again
+- sign in to its MCP servers, in Terminal (see [above](#claude-app-per-account))
 - restore conversations, with a preview first
 - remove the account, after a confirm
 - bind and unbind folders
 
-For all accounts you can add an account, take a backup now, turn the daily autobackup on or off, and see the snapshots. On macOS you can also turn autoupdate on or off (see [Updates](#updates)).
+For all accounts you can add an account, take a backup now, turn the daily autobackup on or off, and see the snapshots. On macOS you can also turn autoupdate on or off, and *Restart Claude* quits and reopens every open copy, as `cca update` does (see [Updates](#updates)). A restart also gives an account the default account's MCP servers if it has none yet.
 
 The app calls `cca`, so the terminal and the app always agree. Install `cca` first with `./install.sh` (`.\install.ps1` on Windows). `cca list --json` prints the accounts, folders and snapshots as JSON, which is what the app reads.
 

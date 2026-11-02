@@ -29,9 +29,10 @@ function render() {
     });
   }
   $('chk-autobackup').checked = !!(state.data && state.data.autobackup);
-  // Only cca.zsh reports autoupdate: Windows and an older cca have no such command.
+  // Only cca.zsh reports autoupdate and has `cca update`: Windows and an older cca have neither.
   const autoupdate = state.data && state.data.autoupdate;
   $('autoupdate').hidden = typeof autoupdate !== 'boolean';
+  $('btn-restart').hidden = typeof autoupdate !== 'boolean';
   $('chk-autoupdate').checked = !!autoupdate;
 }
 
@@ -71,6 +72,11 @@ async function init() {
   $('btn-add').addEventListener('click', openAdd);
   $('btn-backup').addEventListener('click', (e) => withBusy(e.currentTarget, () => runLogged(['backup'])));
   $('btn-refresh').addEventListener('click', (e) => withBusy(e.currentTarget, refresh));
+  $('btn-restart').addEventListener('click', (e) => {
+    const b = e.currentTarget;
+    if (!window.confirm('Quit and reopen every open Claude copy? If work is running in one, Claude may ask first.')) return;
+    withBusy(b, async () => { await runLogged(['update']); await refresh(); });
+  });
   for (const verb of ['autobackup', 'autoupdate']) {
     $('chk-' + verb).addEventListener('change', (e) => withBusy(e.currentTarget, async () => {
       await runLogged([verb, e.currentTarget.checked ? 'on' : 'off']);
