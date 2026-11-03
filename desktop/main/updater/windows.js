@@ -32,9 +32,13 @@ function wire(win, send) {
     send({ state: 'downloading', version, percent: pct, transferred: p && p.transferred, total: p && p.total });
   });
 
-  // Status only, never a dialog: a failed check is not the user's problem.
+  // Status only, never a dialog: a failed check is not the user's problem. A dropped
+  // or missing connection is marked transient, so the check runs again soon.
   autoUpdater.on('error', (err) => {
-    send({ state: 'error', message: (err && (err.message || String(err))) || 'update failed' });
+    const msg = (err && (err.message || String(err))) || 'update failed';
+    const transient = /net::ERR_|ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket hang up|aborted/i.test(`${msg} ${err && err.code}`);
+    if (transient) send({ state: 'error', transient: true, message: 'The download was interrupted: the connection dropped.' });
+    else send({ state: 'error', message: msg });
   });
 
   autoUpdater.on('update-downloaded', async (info) => {
@@ -60,8 +64,10 @@ function wire(win, send) {
   });
 }
 
-function checkForUpdates(win, send) {
+// opts.manual: the user asked (Check Now), so a put-off update may prompt again.
+function checkForUpdates(win, send, opts = {}) {
   wire(win, send);
+  if (opts.manual) prompted = false;
   // The 'error' listener above already reports failures; swallow the rejection
   // so an unreachable feed cannot become an unhandled promise.
   return Promise.resolve(autoUpdater.checkForUpdates()).catch(() => null);

@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('cca', {
   appInfo: () => ipcRenderer.invoke('app:info'),
   pickFolder: () => ipcRenderer.invoke('dialog:pickFolder'),
   confirm: (opts) => ipcRenderer.invoke('dialog:confirm', opts),
+  checkUpdates: () => ipcRenderer.invoke('update:check'),
   onChanged: (cb) => subscribe('cca:changed', () => cb()),
   onUpdateStatus: (cb) => subscribe('update:status', cb),
   onMenuAction: (cb) => subscribe('menu:action', cb),
