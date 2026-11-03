@@ -23,10 +23,16 @@ function quit() {
 }
 
 function createWindow() {
+  const mac = process.platform === 'darwin';
   win = new BrowserWindow({
     width: 1000,
     height: 680,
+    minWidth: 760,
+    minHeight: 480,
     show: false,
+    // macOS: no separate title bar. The traffic lights sit over a translucent
+    // sidebar, as in System Settings; the page leaves room for them.
+    ...(mac ? { titleBarStyle: 'hiddenInset', vibrancy: 'sidebar', backgroundColor: '#00000000' } : {}),
     webPreferences: {
       preload: path.join(__dirname, '..', 'preload.js'),
       contextIsolation: true,

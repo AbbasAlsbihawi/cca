@@ -1,6 +1,6 @@
 'use strict';
 // Every renderer -> main channel. The renderer only ever sees these results.
-const { app, dialog, ipcMain } = require('electron');
+const { app, dialog, ipcMain, systemPreferences } = require('electron');
 const { runCca, listAccounts, bus } = require('./cca');
 const { runInteractive } = require('./interactive');
 
@@ -41,11 +41,36 @@ function registerIpc(win) {
     return runCca(['restore', '-n', ...rest]);
   });
 
-  ipcMain.handle('app:info', () => ({
-    version: app.getVersion(),
-    platform: process.platform,
-    importSupported: process.platform === 'darwin',
-  }));
+  ipcMain.handle('app:info', () => {
+    // The accent colour chosen in System Settings (macOS) or Personalization (Windows), as RRGGBBAA.
+    let accent = '';
+    try { accent = systemPreferences.getAccentColor ? systemPreferences.getAccentColor() : ''; } catch (e) { /* use the page's default */ }
+    return {
+      version: app.getVersion(),
+      platform: process.platform,
+      importSupported: process.platform === 'darwin',
+      accent: /^[0-9a-f]{6,8}$/i.test(accent || '') ? '#' + accent.slice(0, 6) : '',
+    };
+  });
+
+  // A native confirmation instead of window.confirm. For a destructive action the
+  // safe choice, Cancel, is the default button, as the macOS guidelines ask.
+  ipcMain.handle('dialog:confirm', async (_e, opts) => {
+    const o = opts && typeof opts === 'object' ? opts : {};
+    const str = (v, max) => (typeof v === 'string' ? v.slice(0, max) : '');
+    const ok = str(o.confirm, 40) || 'OK';
+    const destructive = o.destructive === true;
+    const box = {
+      type: destructive ? 'warning' : 'question',
+      buttons: [ok, 'Cancel'],
+      defaultId: destructive ? 1 : 0,
+      cancelId: 1,
+      message: str(o.message, 300) || 'Are you sure?',
+      detail: str(o.detail, 1000) || undefined,
+    };
+    const r = win && !win.isDestroyed() ? await dialog.showMessageBox(win, box) : await dialog.showMessageBox(box);
+    return r.response === 0;
+  });
 
   ipcMain.handle('dialog:pickFolder', async () => {
     const opts = { properties: ['openDirectory', 'createDirectory'] };

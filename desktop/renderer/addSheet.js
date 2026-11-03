@@ -1,53 +1,38 @@
-// Add-account sheet.
-import { colorCss } from './sidebar.js';
+// Add-account sheet: a macOS form, labels on the left, the default button on the right.
 import { logError } from './output.js';
+import { el } from './ui.js';
 
 const IS_WINDOWS = /Windows/i.test(navigator.userAgent);
 
-function field(label, input) {
-  const d = document.createElement('div');
-  d.className = 'field';
-  const l = document.createElement('label');
-  l.textContent = label;
-  d.append(l, input);
-  return d;
+function field(form, label, input, help) {
+  const l = el('label', 'lbl', label);
+  const id = 'f-' + label.toLowerCase().replace(/\W+/g, '');
+  input.id = id;
+  l.htmlFor = id;
+  form.append(l, input);
+  if (help) form.appendChild(help);
 }
 
-export function openAddSheet(sheet, colors, close) {
+export function openAddSheet(sheet, close) {
   sheet.replaceChildren();
-  const h = document.createElement('h2');
-  h.textContent = 'Add account';
-  const name = document.createElement('input'); name.type = 'text'; name.placeholder = 'work';
-  const email = document.createElement('input'); email.type = 'text'; email.placeholder = 'optional';
-  const sso = document.createElement('input'); sso.type = 'checkbox';
-  const ssoWrap = document.createElement('label');
-  ssoWrap.className = 'toggle';
+  const name = el('input'); name.type = 'text'; name.placeholder = 'work'; name.autocomplete = 'off'; name.spellcheck = false;
+  const email = el('input'); email.type = 'text'; email.placeholder = 'Optional'; email.autocomplete = 'off'; email.spellcheck = false;
+  const sso = el('input'); sso.type = 'checkbox';
+  const ssoWrap = el('label', 'check');
   ssoWrap.append(sso, document.createTextNode(' Use SSO'));
-  const col = document.createElement('select');
-  const none = document.createElement('option'); none.value = ''; none.textContent = '(none)';
-  col.appendChild(none);
-  for (const c of colors) {
-    const o = document.createElement('option'); o.value = c; o.textContent = c;
-    col.appendChild(o);
-  }
-  const note = document.createElement('div');
-  note.className = 'muted';
-  note.textContent = 'Login continues in a Terminal window.';
 
-  const cancel = document.createElement('button'); cancel.textContent = 'Cancel';
-  const go = document.createElement('button'); go.textContent = 'Add in Terminal'; go.className = 'primary';
+  const cancel = el('button', '', 'Cancel'); cancel.type = 'button';
+  const go = el('button', 'primary', 'Add in Terminal'); go.type = 'button';
   go.disabled = true;
   // Same rule as cca: lowercase letters, digits, - and _, starting with a letter or digit.
   // Windows only: the macOS interface keeps its old behaviour.
   const NAME_RE = /^[a-z0-9][a-z0-9_-]*$/;
-  const hint = document.createElement('div');
-  hint.className = 'muted';
-  hint.textContent = 'Name: lowercase letters, digits, - and _ only.';
+  const hint = el('div', 'help', 'Lowercase letters, digits, - and _ only.');
   name.addEventListener('input', () => {
     const v = name.value.trim();
     if (!IS_WINDOWS) { go.disabled = !v; return; }
     go.disabled = !NAME_RE.test(v);
-    hint.style.color = v && !NAME_RE.test(v) ? '#ff6b6b' : '';
+    hint.classList.toggle('bad', !!v && !NAME_RE.test(v));
   });
   cancel.addEventListener('click', close);
   go.addEventListener('click', async () => {
@@ -62,19 +47,24 @@ export function openAddSheet(sheet, colors, close) {
         go.disabled = false;
         return;
       }
-      // Colour is applied by making the app once the account exists.
-      if (col.value && colorCss(col.value) !== undefined) {
-        note.textContent = `After login, pick colour "${col.value}" from the account's detail pane.`;
-      }
       close();
     } catch (e) {
       logError('add failed: ' + ((e && e.message) || e));
       go.disabled = false;
     }
   });
-  const actions = document.createElement('div');
-  actions.className = 'sheet-actions';
+
+  const form = el('div', 'form');
+  field(form, 'Name:', name, IS_WINDOWS ? hint : null);
+  field(form, 'Email:', email);
+  form.append(el('span', 'lbl', 'Sign-in:'), ssoWrap);
+  const actions = el('div', 'sheet-actions');
   actions.append(cancel, go);
-  sheet.append(h, field('Name', name), ...(IS_WINDOWS ? [hint] : []), field('Email', email), field('SSO', ssoWrap), field('Colour', col), note, actions);
+  sheet.append(
+    el('h2', null, 'Add Account'),
+    el('p', 'sheet-note', 'The login continues in a Terminal window. Pick the account’s colour on its page afterwards.'),
+    form,
+    actions,
+  );
   name.focus();
 }

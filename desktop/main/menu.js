@@ -18,7 +18,8 @@ function buildAppMenu(actions) {
   };
 
   const account = [
-    { label: 'Add account…', accelerator: 'CmdOrCtrl+N', click: toUi('add') },
+    { label: 'Add Account…', accelerator: 'CmdOrCtrl+N', click: toUi('add') },
+    { label: 'Open Claude', accelerator: 'CmdOrCtrl+O', click: toUi('open') },
     { type: 'separator' },
     { label: 'Backup', accelerator: 'CmdOrCtrl+B', click: backup },
     { label: 'Restore…', click: toUi('restore') },
@@ -26,7 +27,25 @@ function buildAppMenu(actions) {
   account.push({ type: 'separator' }, { label: 'Refresh', accelerator: 'CmdOrCtrl+R', click: () => bus.emit('changed') });
 
   const template = [];
-  if (isMac) template.push({ role: 'appMenu' });
+  // The standard macOS app menu, plus Settings… (⌘,) for the General page.
+  if (isMac) {
+    template.push({
+      label: app.name,
+      submenu: [
+        { role: 'about' },
+        { type: 'separator' },
+        { label: 'Settings…', accelerator: 'Cmd+,', click: toUi('general') },
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' },
+      ],
+    });
+  }
   template.push(
     { label: 'Account', submenu: account },
     { role: 'editMenu' },

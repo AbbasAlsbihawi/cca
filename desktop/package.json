@@ -1,6 +1,6 @@
 {
   "name": "claude-accounts",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "Claude Accounts: switch between Claude Code accounts from the menu bar or tray.",
   "author": "Abbas Alsbihawi",
   "license": "MIT",
