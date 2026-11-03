@@ -10,12 +10,15 @@ function subscribe(channel, cb) {
 }
 
 contextBridge.exposeInMainWorld('cca', {
+  // Known before the first paint, so the layout does not jump once appInfo arrives.
+  platform: process.platform,
   list: () => ipcRenderer.invoke('cca:list'),
   run: (args) => ipcRenderer.invoke('cca:run', args),
   interactive: (args) => ipcRenderer.invoke('cca:interactive', args),
   restorePreview: (args) => ipcRenderer.invoke('cca:restore-preview', args),
   appInfo: () => ipcRenderer.invoke('app:info'),
   pickFolder: () => ipcRenderer.invoke('dialog:pickFolder'),
+  confirm: (opts) => ipcRenderer.invoke('dialog:confirm', opts),
   onChanged: (cb) => subscribe('cca:changed', () => cb()),
   onUpdateStatus: (cb) => subscribe('update:status', cb),
   onMenuAction: (cb) => subscribe('menu:action', cb),

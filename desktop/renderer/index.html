@@ -3,36 +3,42 @@
 <head>
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'">
-<meta name="color-scheme" content="dark light">
+<meta name="color-scheme" content="light dark">
 <title>Claude Accounts</title>
 <link rel="stylesheet" href="styles.css">
 <script type="module" src="app.js"></script>
 </head>
 <body>
-<header id="toolbar">
-  <button id="btn-add">Add account</button>
-  <button id="btn-backup">Backup</button>
-  <label class="toggle"><input type="checkbox" id="chk-autobackup"> Autobackup</label>
-  <label class="toggle" id="autoupdate" hidden title="After the Claude app updates, restart its open copies on the new version"><input type="checkbox" id="chk-autoupdate"> Autoupdate</label>
-  <button id="btn-restart" hidden title="Quit and reopen every open Claude copy, so each runs the installed version and has its MCP servers">Restart Claude</button>
-  <button id="btn-refresh">Refresh</button>
-  <span class="spacer"></span>
-  <progress id="update-progress" max="100" hidden></progress>
-  <span id="update-status" class="muted"></span>
-  <span id="app-version" class="muted"></span>
-</header>
-<main id="panes">
-  <nav id="sidebar" aria-label="Accounts"></nav>
-  <section id="detail"></section>
-</main>
-<section id="output-panel" class="collapsed">
-  <div id="output-bar">
-    <button id="output-toggle" class="link">Output</button>
-    <span class="spacer"></span>
-    <button id="output-clear" class="link">Clear</button>
+<nav id="sidebar" aria-label="Accounts">
+  <div class="drag-strip"></div>
+  <div id="side-list"></div>
+  <footer id="side-foot">
+    <button id="btn-add" class="square" title="Add Account (⌘N)" aria-label="Add Account">+</button>
+    <button id="btn-remove" class="square" title="Remove Account" aria-label="Remove Account">−</button>
+    <button id="side-update" class="link-quiet" hidden>
+      <progress id="side-update-bar" max="100" hidden></progress>
+      <span id="side-update-text"></span>
+    </button>
+  </footer>
+</nav>
+<main id="content">
+  <header id="titlebar"><h1 id="page-title"></h1></header>
+  <div id="banner" role="alert" hidden>
+    <span id="banner-text"></span>
+    <button id="banner-details" class="link">Show Activity</button>
+    <button id="banner-close" class="link" aria-label="Dismiss">✕</button>
   </div>
-  <pre id="output-log"></pre>
-</section>
+  <section id="detail"></section>
+  <section id="output-panel" aria-label="Activity" hidden>
+    <div id="output-bar">
+      <span class="output-title">Activity</span>
+      <span class="spacer"></span>
+      <button id="output-clear" class="link">Clear</button>
+      <button id="output-close" class="link">Hide</button>
+    </div>
+    <pre id="output-log"></pre>
+  </section>
+</main>
 <div id="sheet-backdrop" hidden><div id="sheet" role="dialog" aria-modal="true"></div></div>
 </body>
 </html>

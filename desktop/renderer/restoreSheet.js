@@ -1,27 +1,28 @@
 // Restore sheet: snapshot picker, dry-run preview, restore.
 import { runLogged, withBusy, logError } from './output.js';
+import { el, snapshotLabel } from './ui.js';
 
 export function openRestoreSheet(sheet, accountName, snapshots, close, onDone) {
   sheet.replaceChildren();
-  const h = document.createElement('h2');
-  h.textContent = `Restore "${accountName}"`;
-  const sel = document.createElement('select');
+  const sel = el('select');
+  sel.id = 'f-snapshot';
   const snaps = Array.isArray(snapshots) ? snapshots.slice().reverse() : [];
   for (const s of snaps) {
-    const o = document.createElement('option'); o.value = s; o.textContent = s;
+    const o = el('option', null, snapshotLabel(s));
+    o.value = s;
     sel.appendChild(o);
   }
-  const pv = document.createElement('pre');
-  pv.className = 'preview';
-  const cancel = document.createElement('button'); cancel.textContent = 'Cancel';
-  const go = document.createElement('button'); go.textContent = 'Restore'; go.className = 'primary';
+  const pv = el('pre', 'preview');
+  pv.setAttribute('aria-label', 'Preview');
+  const cancel = el('button', '', 'Cancel'); cancel.type = 'button';
+  const go = el('button', 'primary', 'Restore'); go.type = 'button';
   go.disabled = true;
 
   let token = 0;
   async function preview() {
     const my = ++token;
     go.disabled = true;
-    if (!sel.value) { pv.textContent = 'No snapshots available.'; return; }
+    if (!sel.value) { pv.textContent = 'No backups yet.'; return; }
     pv.textContent = 'Loading preview…';
     try {
       const r = await window.cca.restorePreview(['restore', '-n', accountName, sel.value]);
@@ -41,13 +42,18 @@ export function openRestoreSheet(sheet, accountName, snapshots, close, onDone) {
     if (r.code === 0) { close(); onDone(); }
   }));
 
-  const actions = document.createElement('div');
-  actions.className = 'sheet-actions';
+  const form = el('div', 'form');
+  const l = el('label', 'lbl', 'Backup:');
+  l.htmlFor = sel.id;
+  form.append(l, sel);
+  const actions = el('div', 'sheet-actions');
   actions.append(cancel, go);
-  const f = document.createElement('div'); f.className = 'field';
-  const l = document.createElement('label'); l.textContent = 'Snapshot';
-  f.append(l, sel);
-  const l2 = document.createElement('label'); l2.className = 'muted'; l2.textContent = 'Dry-run preview';
-  sheet.append(h, f, l2, pv, actions);
+  sheet.append(
+    el('h2', null, `Restore “${accountName}”`),
+    el('p', 'sheet-note', 'What a restore would change. Nothing changes until you choose Restore.'),
+    form,
+    pv,
+    actions,
+  );
   preview();
 }

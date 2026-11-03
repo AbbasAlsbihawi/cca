@@ -1,5 +1,3 @@
-[العربية](README.ar.md)
-
 # cca
 
 cca runs several Claude accounts on one Mac, for example personal, work and client, in the Claude Code terminal and in the Claude desktop app. You do not log out to switch.
@@ -165,18 +163,18 @@ macOS may ask once for permission to control Claude. Allow it, or the copies can
 
 "Claude Accounts" is one app for macOS and Windows that does the same things with buttons. Install it from [GitHub Releases](https://github.com/AbbasAlsbihawi/cca/releases): the `.dmg` on macOS, `ClaudeAccounts-Setup-<version>.exe` on Windows. It updates itself. Neither build is signed with a paid developer certificate, so the first launch is blocked: on macOS open System Settings → Privacy & Security and choose *Open Anyway*; on Windows choose *More info* → *Run anyway*.
 
-The window lists your accounts. For each account you can:
+The window is laid out like macOS System Settings: your accounts are in the sidebar, and each one has its own page. For each account you can:
 
 - open its Claude app, or make the app
 - pick a colour for its icon
-- open a New Terminal that uses the account
+- open a Terminal that uses the account
 - log in again
 - sign in to its MCP servers, in Terminal (see [above](#claude-app-per-account))
 - restore conversations, with a preview first
 - remove the account, after a confirm
 - bind and unbind folders
 
-For all accounts you can add an account, take a backup now, turn the daily autobackup on or off, and see the snapshots. On macOS you can also turn autoupdate on or off, and *Restart Claude* quits and reopens every open copy, as `cca update` does (see [Updates](#updates)). A restart also gives an account the default account's MCP servers if it has none yet.
+Add an account with **+** under the list. The *General* page at the bottom of the sidebar (*Settings…*, ⌘, on macOS) is for everything that applies to all accounts: take a backup now, turn the daily autobackup on or off, see the latest backup, and see the app's version and its update status, with a progress bar while an update downloads. On macOS it also turns autoupdate on or off, and *Restart Claude…* quits and reopens every open copy, as `cca update` does (see [Updates](#updates)). A restart also gives an account the default account's MCP servers if it has none yet. If a command fails, a banner says so; *Show Activity* lists every command the window ran, with its output.
 
 The app calls `cca`, so the terminal and the app always agree. On macOS, install `cca` first with `./install.sh`. On Windows the app installs its own copy when it starts; run `.\install.ps1` as well if you want the `cca` command in PowerShell. `cca list --json` prints the accounts, folders and snapshots as JSON, which is what the app reads.
 

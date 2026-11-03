@@ -1,6 +1,8 @@
-// Output panel: logs every command with its stdout/stderr.
+// Activity: every command with its stdout/stderr, in a panel kept out of the way.
+// A failure shows as a banner over the page instead of opening the panel.
 const panel = () => document.getElementById('output-panel');
 const logEl = () => document.getElementById('output-log');
+let bannerTimer = null;
 
 function line(cls, text) {
   const s = document.createElement('span');
@@ -10,13 +12,41 @@ function line(cls, text) {
   logEl().scrollTop = logEl().scrollHeight;
 }
 
+export function showActivity() {
+  panel().hidden = false;
+  logEl().scrollTop = logEl().scrollHeight;
+}
+
+export function hideBanner() {
+  clearTimeout(bannerTimer);
+  document.getElementById('banner').hidden = true;
+}
+
+// kind 'error' stays until dismissed; 'ok' goes away by itself.
+export function showBanner(text, kind = 'error') {
+  const b = document.getElementById('banner');
+  clearTimeout(bannerTimer);
+  document.getElementById('banner-text').textContent = text;
+  b.className = kind === 'ok' ? 'ok' : 'error';
+  document.getElementById('banner-details').hidden = kind === 'ok';
+  b.hidden = false;
+  if (kind === 'ok') bannerTimer = setTimeout(hideBanner, 4000);
+}
+
 export function initOutput() {
-  document.getElementById('output-toggle').addEventListener('click', () => panel().classList.toggle('collapsed'));
+  document.getElementById('output-close').addEventListener('click', () => { panel().hidden = true; });
   document.getElementById('output-clear').addEventListener('click', () => { logEl().textContent = ''; });
+  document.getElementById('banner-details').addEventListener('click', () => { showActivity(); hideBanner(); });
+  document.getElementById('banner-close').addEventListener('click', hideBanner);
 }
 
 export function logCommand(args) { line('cmd', '$ cca ' + args.join(' ')); }
-export function logError(msg) { line('stderr', String(msg)); panel().classList.remove('collapsed'); }
+export function logError(msg) { line('stderr', String(msg)); showBanner(String(msg)); }
+
+// The first line that says what went wrong, for the banner; the full text stays in Activity.
+function firstLine(text) {
+  return String(text || '').split('\n').map((s) => s.trim()).find(Boolean) || '';
+}
 
 // Runs window.cca.run(args), logging command and output. Returns the result (never throws).
 export async function runLogged(args) {
@@ -32,13 +62,13 @@ export async function runLogged(args) {
   if (res.stderr) line('stderr', String(res.stderr));
   if (res.code !== 0) {
     line('stderr', `(exit ${res.code})`);
-    panel().classList.remove('collapsed');
+    showBanner(`cca ${args[0]} failed: ${firstLine(res.stderr) || firstLine(res.stdout) || 'exit ' + res.code}`);
   }
   return res;
 }
 
-// Wraps an async action so the button is disabled while it runs.
+// Wraps an async action so the control is disabled, and shows as busy, while it runs.
 export async function withBusy(btn, fn) {
-  if (btn) btn.disabled = true;
-  try { return await fn(); } finally { if (btn) btn.disabled = false; }
+  if (btn) { btn.disabled = true; btn.setAttribute('aria-busy', 'true'); }
+  try { return await fn(); } finally { if (btn) { btn.disabled = false; btn.removeAttribute('aria-busy'); } }
 }

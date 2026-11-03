@@ -1,58 +1,158 @@
-:root{--bg:#1e1e20;--panel:#262628;--side:#2a2a2d;--fg:#ececee;--muted:#9a9aa2;--line:#3a3a3e;--accent:#d97757;--sel:#3a3a40;--err:#ff7b72;--btn:#3a3a3f;--btn-h:#46464c}
-@media (prefers-color-scheme:light){:root{--bg:#fff;--panel:#f6f6f7;--side:#efeff1;--fg:#1d1d1f;--muted:#6e6e76;--line:#d8d8dc;--sel:#dcdce2;--err:#c62828;--btn:#e6e6ea;--btn-h:#d8d8de}}
+/* macOS System Settings look. Colours follow the system's light or dark mode;
+   --accent is replaced at start by the accent colour chosen in System Settings. */
+:root{
+  --accent:#007aff;--on-accent:#fff;
+  --sidebar:#e8e8ec;--content:#f5f5f7;--group:#fff;--sheet:#f6f6f6;--log:#fff;
+  --sep:rgba(0,0,0,.1);--label:rgba(0,0,0,.86);--secondary:rgba(0,0,0,.56);--tertiary:rgba(0,0,0,.25);
+  --hover:rgba(0,0,0,.05);--control:#fff;--control-edge:rgba(0,0,0,.16);--control-shadow:0 .5px 1px rgba(0,0,0,.14);
+  --field:#fff;--switch-off:rgba(0,0,0,.12);
+  --red:#e0352b;--green:#28cd41;--green-text:#1a7f30;
+  --banner-error:rgba(255,59,48,.12);--banner-ok:rgba(40,205,65,.14);
+  --focus:color-mix(in srgb,var(--accent) 55%,transparent);
+}
+@media (prefers-color-scheme:dark){:root{
+  --sidebar:#2b2b2e;--content:#1e1e1e;--group:#2a2a2c;--sheet:#2c2c2e;--log:#161617;
+  --sep:rgba(255,255,255,.1);--label:rgba(255,255,255,.88);--secondary:rgba(255,255,255,.56);--tertiary:rgba(255,255,255,.28);
+  --hover:rgba(255,255,255,.06);--control:rgba(255,255,255,.16);--control-edge:rgba(255,255,255,.05);--control-shadow:0 .5px 1px rgba(0,0,0,.35);
+  --field:rgba(255,255,255,.07);--switch-off:rgba(255,255,255,.16);
+  --red:#ff453a;--green:#32d74b;--green-text:#32d74b;
+  --banner-error:rgba(255,69,58,.18);--banner-ok:rgba(50,215,75,.16);
+}}
+
 *{box-sizing:border-box}
 html,body{height:100%;margin:0}
-body{display:flex;flex-direction:column;background:var(--bg);color:var(--fg);font:13px -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
-.muted{color:var(--muted);font-size:12px}
+body{display:flex;overflow:hidden;background:var(--content);color:var(--label);
+  font:13px/1.35 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;user-select:none;cursor:default}
+/* macOS: the window is translucent behind the sidebar (vibrancy); the content stays opaque. */
+html.mac,html.mac body{background:transparent}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .spacer{flex:1}
-button{font:inherit;color:var(--fg);background:var(--btn);border:1px solid var(--line);border-radius:6px;padding:4px 10px;cursor:pointer}
-button:hover:not(:disabled){background:var(--btn-h)}
-button:disabled{opacity:.5;cursor:default}
-button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
-button.danger{color:var(--err)}
-button.link{background:none;border:0;padding:2px 6px;color:var(--muted)}
-input[type=text]{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:5px 8px;width:100%}
-select{font:inherit;color:var(--fg);background:var(--btn);border:1px solid var(--line);border-radius:6px;padding:4px}
-#toolbar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--panel);border-bottom:1px solid var(--line)}
-.toggle{display:flex;align-items:center;gap:4px;margin:0 4px}
-.toggle[hidden]{display:none}
-#toolbar button,#toolbar .toggle{flex:none}
-#update-progress{flex:none;width:80px;height:8px;accent-color:var(--accent)}
-#update-progress[hidden]{display:none}
-#update-status{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#panes{flex:1;display:flex;min-height:0}
-#sidebar{width:240px;overflow:auto;background:var(--side);border-right:1px solid var(--line);padding:6px}
-#detail{flex:1;overflow:auto;padding:20px 24px}
-.row{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:6px;cursor:pointer}
-.row:hover{background:var(--btn)}
-.row.selected{background:var(--sel)}
-.row .text{flex:1;min-width:0}
-.row .name,.row .email{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.row .email{color:var(--muted);font-size:11px}
-.dot{width:12px;height:12px;border-radius:50%;flex:none;background:var(--muted)}
-.badge{font-size:10px;padding:1px 6px;border-radius:8px;background:#2e9d5b;color:#fff}
-.badge.def{background:var(--btn-h);color:var(--fg)}
-.empty{color:var(--muted);padding:20px;text-align:center}
-.detail-head{display:flex;align-items:center;gap:10px;margin-bottom:4px}
-.detail-head h2{margin:0;font-size:20px}
-.kv{color:var(--muted);margin:2px 0}
-.actions{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0;align-items:center}
-h3{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:20px 0 6px}
-.folder{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--line)}
-.folder span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#output-panel{border-top:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;height:200px}
-#output-panel.collapsed{height:auto}
-#output-panel.collapsed #output-log{display:none}
-#output-bar{display:flex;align-items:center;padding:2px 8px}
-#output-log{flex:1;margin:0;padding:4px 12px 8px;overflow:auto;font:12px ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap}
+[hidden]{display:none!important}
+
+/* --- controls ---------------------------------------------------------------- */
+button{font:inherit;color:var(--label);background:var(--control);border:0;border-radius:6px;padding:3px 11px;min-height:22px;
+  box-shadow:0 0 0 .5px var(--control-edge),var(--control-shadow);white-space:nowrap;cursor:default;-webkit-app-region:no-drag}
+button:active:not(:disabled){filter:brightness(.93)}
+@media (prefers-color-scheme:dark){button:active:not(:disabled){filter:brightness(1.25)}}
+button:disabled{opacity:.45}
+button.primary{background:var(--accent);color:var(--on-accent);box-shadow:var(--control-shadow)}
+button.destructive{color:var(--red)}
+button.link,button.link-quiet{background:none;box-shadow:none;padding:2px 4px;min-height:0}
+button.link{color:var(--accent)}
+button.link-quiet{color:var(--secondary)}
+button.square{width:24px;height:22px;padding:0;font-size:15px;line-height:1;display:inline-flex;align-items:center;justify-content:center}
+button[aria-busy="true"]{cursor:progress}
+button[aria-busy="true"]:not(.swatch):not(.square)::after{content:"";display:inline-block;width:9px;height:9px;margin-left:6px;vertical-align:-1px;
+  border:1.5px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+:focus{outline:none}
+:focus-visible{outline:3px solid var(--focus);outline-offset:1px}
+progress{accent-color:var(--accent);height:6px}
+input[type=text],select{font:inherit;color:var(--label);border-radius:5px;min-height:22px;width:100%;-webkit-app-region:no-drag}
+input[type=text]{background:var(--field);border:0;box-shadow:0 0 0 .5px var(--control-edge),inset 0 .5px 1px rgba(0,0,0,.08);padding:3px 7px;user-select:text;cursor:text}
+input[type=text]:focus-visible,input[type=text]:focus{outline:3px solid var(--focus);outline-offset:0}
+input[type=checkbox]{accent-color:var(--accent);margin:0 4px 0 0;vertical-align:-2px}
+/* A checkbox drawn as a macOS switch. */
+input.switch{appearance:none;-webkit-appearance:none;width:32px;height:18px;border-radius:9px;margin:0;flex:none;position:relative;
+  background:var(--switch-off);transition:background-color .18s ease}
+input.switch::before{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;
+  box-shadow:0 1px 2px rgba(0,0,0,.3),0 0 0 .5px rgba(0,0,0,.06);transition:transform .18s ease}
+input.switch:checked{background:var(--accent)}
+input.switch:checked::before{transform:translateX(14px)}
+input.switch:disabled{opacity:.5}
+
+/* --- sidebar ------------------------------------------------------------------ */
+#sidebar{width:220px;flex:none;display:flex;flex-direction:column;background:var(--sidebar);border-right:1px solid var(--sep)}
+html.mac #sidebar{background:transparent}
+.drag-strip{height:10px;flex:none}
+html.mac .drag-strip{height:52px;-webkit-app-region:drag}
+#side-list{flex:1;overflow:auto;padding:0 10px 10px}
+.side-sec{font-size:11px;font-weight:600;color:var(--secondary);padding:10px 8px 4px}
+.side-empty{color:var(--secondary);padding:4px 8px}
+.side-row{display:flex;align-items:center;gap:8px;width:100%;margin:1px 0;padding:5px 8px;border-radius:6px;background:none;box-shadow:none;
+  color:var(--label);text-align:left;min-height:34px}
+.side-row:hover{background:var(--hover)}
+.side-row[aria-current="page"]{background:var(--accent);color:var(--on-accent)}
+.side-row:focus-visible{outline-offset:-1px}
+.side-row:active:not(:disabled){filter:none}
+.side-row .txt{flex:1;min-width:0}
+.side-row .name,.side-row .sub{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.side-row .sub{font-size:11px;color:var(--secondary)}
+.side-row[aria-current="page"] .sub{color:color-mix(in srgb,var(--on-accent) 82%,transparent)}
+.avatar{width:24px;height:24px;border-radius:50%;flex:none;display:inline-flex;align-items:center;justify-content:center;
+  background:#8e8e93;color:#fff;font-weight:600;font-size:11px;text-transform:uppercase;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.12)}
+.avatar.big{width:56px;height:56px;font-size:24px}
+.run-dot{width:7px;height:7px;border-radius:50%;background:var(--green);flex:none}
+.side-row[aria-current="page"] .run-dot{box-shadow:0 0 0 1.5px var(--on-accent)}
+.symbol{width:24px;height:24px;border-radius:6px;flex:none;display:inline-flex;align-items:center;justify-content:center;background:#8e8e93}
+.symbol svg{width:15px;height:15px;fill:none;stroke:#fff;stroke-width:1.9;stroke-linejoin:round}
+.symbol.big{width:56px;height:56px;border-radius:13px}
+.symbol.big svg{width:32px;height:32px;stroke-width:1.6}
+#side-foot{display:flex;align-items:center;gap:6px;padding:8px 10px;border-top:1px solid var(--sep)}
+#side-update{margin-left:auto;display:flex;align-items:center;gap:6px;font-size:11px;min-width:0}
+#side-update-bar{width:52px;flex:none}
+#side-update-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* --- content ------------------------------------------------------------------ */
+#content{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--content)}
+#titlebar{height:52px;flex:none;display:flex;align-items:center;padding:0 24px;-webkit-app-region:drag}
+html:not(.mac) #titlebar{height:44px}
+#titlebar h1{margin:0;font-size:15px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#detail{flex:1;overflow:auto;padding:4px 24px 28px}
+.page{max-width:640px;margin:0 auto}
+.page-head{display:flex;align-items:center;gap:14px;margin:6px 0 22px}
+.page-head .who{flex:1;min-width:0}
+.page-head h2{margin:0;font-size:20px;font-weight:600;display:flex;align-items:center;gap:8px;overflow:hidden}
+.page-head .meta{color:var(--secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pill{font-size:11px;font-weight:500;padding:1px 8px;border-radius:9px;background:color-mix(in srgb,var(--green) 18%,transparent);color:var(--green-text);flex:none}
+.group-title{margin:0 0 6px 2px;font-size:13px;font-weight:600}
+.group{background:var(--group);border-radius:10px;box-shadow:0 0 0 .5px var(--sep);margin-bottom:22px}
+.grow{display:flex;align-items:center;gap:12px;min-height:40px;padding:7px 12px;position:relative}
+.grow+.grow::before{content:"";position:absolute;left:12px;right:0;top:0;border-top:1px solid var(--sep)}
+.grow .k{flex:1;min-width:0}
+.grow .k-label{display:block}
+.grow .k small{display:block;color:var(--secondary);font-size:11px;margin-top:1px}
+.grow .v{color:var(--secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;max-width:45%}
+/* Long paths lose their start, not the folder name at the end. */
+.grow .path{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl;text-align:left;user-select:text}
+.grow .path bdi{direction:ltr;unicode-bidi:isolate}
+.gen-update-bar{width:120px;flex:none}
+.swatches{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+button.swatch{width:18px;height:18px;min-height:0;padding:0;border-radius:50%;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.18)}
+button.swatch[aria-pressed="true"]{box-shadow:0 0 0 2px var(--group),0 0 0 4px var(--accent)}
+.placeholder{display:flex;align-items:center;justify-content:center;gap:8px;height:100%;color:var(--secondary)}
+.placeholder.busy::before{content:"";width:12px;height:12px;border:1.5px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .8s linear infinite}
+.empty{text-align:center;color:var(--secondary);padding:60px 20px}
+.empty p{margin:0 0 14px}
+
+/* --- banner and activity -------------------------------------------------------- */
+#banner{display:flex;align-items:center;gap:8px;align-self:center;width:min(640px,calc(100% - 48px));margin:0 0 10px;padding:7px 8px 7px 12px;border-radius:8px;background:var(--banner-error)}
+#banner.ok{background:var(--banner-ok)}
+#banner-text{flex:1;min-width:0;overflow-wrap:anywhere;user-select:text}
+#output-panel{flex:none;height:200px;display:flex;flex-direction:column;border-top:1px solid var(--sep);background:var(--log)}
+#output-bar{display:flex;align-items:center;gap:6px;padding:4px 12px}
+.output-title{font-size:12px;font-weight:600}
+#output-log{flex:1;margin:0;padding:2px 12px 10px;overflow:auto;font:11px/1.45 ui-monospace,"SF Mono",Menlo,Consolas,monospace;white-space:pre-wrap;user-select:text;cursor:text}
 .cmd{color:var(--accent);font-weight:600}
-.stdout{color:var(--fg)}
-.stderr{color:var(--err)}
-#sheet-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center}
-#sheet-backdrop[hidden]{display:none}
-#sheet{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:20px;width:460px;max-width:92vw;max-height:88vh;overflow:auto}
-#sheet h2{margin:0 0 12px;font-size:16px}
-.field{margin:10px 0}
-.field label{display:block;margin-bottom:4px;color:var(--muted);font-size:12px}
-.sheet-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
-.preview{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:8px;height:180px;overflow:auto;margin:0;font:12px ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap}
+.stdout{color:var(--label)}
+.stderr{color:var(--red)}
+
+/* --- sheets: drop from under the title bar, as macOS sheets do -------------------- */
+#sheet-backdrop{position:fixed;inset:0;z-index:10;display:flex;justify-content:center;align-items:flex-start;padding-top:44px;background:rgba(0,0,0,.16)}
+#sheet{width:440px;max-width:calc(100vw - 48px);max-height:calc(100vh - 72px);overflow:auto;padding:20px;border-radius:12px;background:var(--sheet);
+  box-shadow:0 0 0 .5px var(--sep),0 22px 60px rgba(0,0,0,.32);animation:sheet-in .2s ease-out}
+@keyframes sheet-in{from{transform:translateY(-10px);opacity:0}to{transform:none;opacity:1}}
+#sheet h2{margin:0 0 4px;font-size:13px;font-weight:600}
+.sheet-note{margin:0 0 16px;color:var(--secondary);font-size:12px}
+.form{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:center}
+.form .lbl{text-align:right;white-space:nowrap}
+.form .help{grid-column:2;margin-top:-6px;font-size:11px;color:var(--secondary)}
+.form .help.bad{color:var(--red)}
+.check{display:flex;align-items:center}
+.preview{margin:14px 0 0;height:180px;overflow:auto;padding:8px;border-radius:6px;background:var(--field);box-shadow:0 0 0 .5px var(--control-edge);
+  font:11px/1.45 ui-monospace,"SF Mono",Menlo,Consolas,monospace;white-space:pre-wrap;user-select:text}
+.sheet-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
+.sheet-actions button{min-width:76px}
+
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
