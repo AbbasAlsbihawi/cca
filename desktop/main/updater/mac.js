@@ -4,6 +4,9 @@
 // this reads the GitHub releases feed, downloads the matching zip, unpacks it
 // with ditto, and hands a detached script the one thing the running app cannot
 // do itself: replace its own bundle. Every failure cleans up and reports.
+// When the release was built with the Electron this app runs, it first tries the
+// update-only zip (about 1 MB instead of over 100 MB) and fills in the Electron
+// frameworks from the installed bundle; see stageFromUpdateZip.
 const { app, dialog } = require('electron');
 const { execFile, spawn } = require('child_process');
 const crypto = require('crypto');
@@ -16,8 +19,10 @@ const { pipeline } = require('stream/promises');
 const RELEASE_URL = 'https://api.github.com/repos/AbbasAlsbihawi/cca/releases/latest';
 const NET_TIMEOUT_MS = 20 * 1000;
 const DITTO_TIMEOUT_MS = 5 * 60 * 1000;
+const CODESIGN_TIMEOUT_MS = 2 * 60 * 1000;
 const MAX_FEED_BYTES = 2 * 1024 * 1024;
 const MIN_ZIP_BYTES = 1024 * 1024; // a real app zip is tens of MB; less means an error page or a truncated body
+const MIN_UPDATE_ZIP_BYTES = 64 * 1024; // the update-only zip is about 1 MB: the app code and no Electron
 const MAX_ZIP_BYTES = 600 * 1024 * 1024;
 const MAX_REDIRECTS = 4;
 
@@ -85,18 +90,33 @@ function isNewer(remote, local) {
   return false;
 }
 
+function releaseAssets(release) {
+  return (Array.isArray(release.assets) ? release.assets : [])
+    .filter((a) => a && typeof a.name === 'string' && a.browser_download_url);
+}
+
 // Keyed on the running architecture: installing an x64 build on arm64 (or the
 // reverse) produces an app that cannot launch, so no match means no update.
 function pickAsset(release, version) {
   const arch = process.arch;
   if (arch !== 'arm64' && arch !== 'x64') return null;
-  const assets = (Array.isArray(release.assets) ? release.assets : [])
-    .filter((a) => a && typeof a.name === 'string' && a.browser_download_url);
+  const assets = releaseAssets(release);
   const exact = `claudeaccounts-${version}-${arch}-mac.zip`;
   const name = (a) => a.name.toLowerCase();
   return assets.find((a) => name(a) === exact)
     || assets.find((a) => name(a).endsWith('.zip') && name(a).includes(`-${arch}-mac`))
     || null;
+}
+
+// The update-only zip (scripts/update-zip.sh) names the Electron it was built
+// with. Only an exact match with the running one is worth downloading; any other
+// release, or one published without it, goes straight to the full zip.
+function pickUpdateAsset(release, version) {
+  const arch = process.arch;
+  const electron = process.versions.electron;
+  if ((arch !== 'arm64' && arch !== 'x64') || !electron) return null;
+  const exact = `claudeaccounts-${version}-${arch}-update-electron-${electron}.zip`.toLowerCase();
+  return releaseAssets(release).find((a) => a.name.toLowerCase() === exact) || null;
 }
 
 // --- the installed bundle --------------------------------------------------
@@ -135,8 +155,7 @@ function swapBlocker(bundle) {
 
 // --- download and unpack ---------------------------------------------------
 
-async function download(asset, dir, version, send) {
-  const zip = path.join(dir, 'update.zip');
+async function download(asset, zip, version, send, minBytes = MIN_ZIP_BYTES) {
   const res = await open(asset.browser_download_url, { 'User-Agent': userAgent(), Accept: 'application/octet-stream' });
   res.setTimeout(NET_TIMEOUT_MS, () => res.destroy(new Error('download stalled')));
 
@@ -156,7 +175,7 @@ async function download(asset, dir, version, send) {
   // a floor otherwise. A truncated zip must never reach the swap.
   const size = fs.statSync(zip).size;
   if (expected && size !== expected) throw new Error(`download incomplete: ${size} of ${expected} bytes`);
-  if (size < MIN_ZIP_BYTES) throw new Error(`download too small to be an app (${size} bytes)`);
+  if (size < minBytes) throw new Error(`download too small to be an app (${size} bytes)`);
 
   // GitHub publishes a "sha256:<hex>" digest per asset. Check it, so a corrupted or
   // truncated body can never be unpacked over the installed app. The digest arrives
@@ -177,15 +196,20 @@ async function download(asset, dir, version, send) {
   return zip;
 }
 
-// ditto, not unzip: it preserves the symlinks, permissions and metadata an .app
-// bundle needs to launch at all.
-function ditto(zip, dir) {
+// A system tool; a failure rejects with what it printed, after `what`.
+function run(file, args, timeout, what) {
   return new Promise((resolve, reject) => {
-    execFile('/usr/bin/ditto', ['-x', '-k', zip, dir], { timeout: DITTO_TIMEOUT_MS }, (err, _out, stderr) => {
-      if (err) reject(new Error(`could not unpack the update: ${String(stderr || err.message).trim().slice(0, 200)}`));
+    execFile(file, args, { timeout }, (err, _out, stderr) => {
+      if (err) reject(new Error(`${what}: ${String(stderr || err.message).trim().slice(0, 200)}`));
       else resolve();
     });
   });
+}
+
+// ditto, not unzip: it preserves the symlinks, permissions and metadata an .app
+// bundle needs to launch at all.
+function ditto(zip, dir) {
+  return run('/usr/bin/ditto', ['-x', '-k', zip, dir], DITTO_TIMEOUT_MS, 'could not unpack the update');
 }
 
 function findBundle(dir) {
@@ -212,6 +236,55 @@ function isRunnable(bundle) {
   } catch (e) {
     return false;
   }
+}
+
+function bundleVersion(bundle) {
+  try {
+    const plist = fs.readFileSync(path.join(bundle, 'Contents', 'Info.plist'), 'utf8');
+    const m = /<key>CFBundleShortVersionString<\/key>\s*<string>([^<]*)<\/string>/.exec(plist);
+    return m ? m[1].trim() : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// --- the update-only zip ---------------------------------------------------
+
+// The small path: the update-only zip is the new bundle minus its
+// Contents/Frameworks/*.framework, still carrying the signature of the full
+// build. That signature seals the hash of every nested framework, so once the
+// installed app's frameworks are copied in, codesign --verify passes only if they
+// are byte for byte the ones the release was built with. Nothing is re-signed:
+// what reaches the swap is the release's own bundle. Any mismatch throws, and the
+// caller downloads the full zip instead.
+async function stageFromUpdateZip(asset, dest, dir, version, send) {
+  fs.mkdirSync(dir);
+  const zip = await download(asset, path.join(dir, 'update.zip'), version, send, MIN_UPDATE_ZIP_BYTES);
+
+  send({ state: 'unpacking', version });
+  const out = path.join(dir, 'unpacked');
+  fs.mkdirSync(out);
+  await ditto(zip, out);
+  const staged = findBundle(out);
+  if (!staged) throw new Error('the update-only zip holds no app bundle');
+  const inside = bundleVersion(staged);
+  if (inside !== version) throw new Error(`the update-only zip holds version ${inside}, not ${version}`);
+
+  const from = path.join(dest, 'Contents', 'Frameworks');
+  const into = path.join(staged, 'Contents', 'Frameworks');
+  const frameworks = fs.readdirSync(from).filter((n) => n.endsWith('.framework'));
+  if (!frameworks.includes('Electron Framework.framework')) throw new Error('the installed app has no Electron Framework');
+  for (const name of frameworks) {
+    const target = path.join(into, name);
+    if (fs.existsSync(target)) throw new Error(`the update-only zip already holds ${name}`);
+    // -c clones on APFS (instant, no extra space) and falls back to a plain copy.
+    await run('/bin/cp', ['-c', '-R', '-p', path.join(from, name), target], DITTO_TIMEOUT_MS, `could not copy ${name}`);
+  }
+
+  await run('/usr/bin/codesign', ['--verify', '--deep', '--strict', staged], CODESIGN_TIMEOUT_MS,
+    'the assembled update fails its signature check');
+  if (!isRunnable(staged)) throw new Error('the assembled update is not a usable app bundle');
+  return staged;
 }
 
 // --- the swap --------------------------------------------------------------
@@ -365,16 +438,32 @@ async function checkForUpdates(win, send) {
 
     send({ state: 'available', version });
     work = fs.mkdtempSync(path.join(os.tmpdir(), 'cca-update-'));
-    const zip = await download(asset, work, version, send);
 
-    send({ state: 'unpacking', version });
-    const out = path.join(work, 'unpacked');
-    fs.mkdirSync(out, { recursive: true });
-    await ditto(zip, out);
+    let staged = null;
+    const small = pickUpdateAsset(release, version);
+    if (small) {
+      const dir = path.join(work, 'small');
+      try {
+        staged = await stageFromUpdateZip(small, dest, dir, version, send);
+      } catch (err) {
+        // Not worth troubling anyone with: the full zip below does the same job.
+        console.error(`update-only zip not used, downloading the full app: ${(err && err.message) || err}`);
+        cleanup(dir);
+      }
+    }
 
-    const staged = findBundle(out);
-    if (!staged || !isRunnable(staged)) {
-      throw new Error('the downloaded update does not contain a usable app bundle');
+    if (!staged) {
+      const zip = await download(asset, path.join(work, 'update.zip'), version, send);
+
+      send({ state: 'unpacking', version });
+      const out = path.join(work, 'unpacked');
+      fs.mkdirSync(out, { recursive: true });
+      await ditto(zip, out);
+
+      staged = findBundle(out);
+      if (!staged || !isRunnable(staged)) {
+        throw new Error('the downloaded update does not contain a usable app bundle');
+      }
     }
 
     send({ state: 'ready', version });

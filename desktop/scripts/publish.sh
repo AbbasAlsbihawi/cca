@@ -16,12 +16,12 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-echo "==> [1/6] Reading version from package.json"
+echo "==> [1/7] Reading version from package.json"
 V=$(node -p "require('./package.json').version")
 [ -n "$V" ] || { echo "ERROR: could not read version" >&2; exit 1; }
 echo "    version $V (tag v$V)"
 
-echo "==> [2/6] Checking git state"
+echo "==> [2/7] Checking git state"
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 if [ "$BRANCH" != "main" ]; then
   echo "ERROR: must be on main, currently on '$BRANCH'" >&2
@@ -41,7 +41,7 @@ if [ -n "$(git ls-remote --tags origin "refs/tags/v$V")" ]; then
   exit 1
 fi
 
-echo "==> [3/6] Verifying release assets in $DESKTOP_DIR/release"
+echo "==> [3/7] Verifying release assets in $DESKTOP_DIR/release"
 ASSETS="ClaudeAccounts-$V-arm64-mac.dmg
 ClaudeAccounts-$V-x64-mac.dmg
 ClaudeAccounts-$V-arm64-mac.zip
@@ -63,7 +63,7 @@ if [ "$MISSING" -ne 0 ]; then
   exit 1
 fi
 
-echo "==> [4/6] Verifying the macOS code signature"
+echo "==> [4/7] Verifying the macOS code signature"
 # The dmg and zip are packaged from these two bundles. macOS treats an app whose
 # signature does not seal its resources as damaged: it removes a downloaded copy
 # instead of opening it, which is how 0.1.0 to 0.1.2 shipped. Ad-hoc is what
@@ -87,19 +87,31 @@ for app in "release/mac-arm64/Claude Accounts.app" "release/mac/Claude Accounts.
   echo "    ok       $app (ad-hoc, resources sealed)"
 done
 
-echo "==> [5/6] Tagging and pushing"
+echo "==> [5/7] Building the macOS update-only zips"
+# The app bundle without its Electron frameworks: about 1 MB instead of over 100 MB.
+# The updater takes it when the installed app runs the same Electron, and falls
+# back to the full zip otherwise. Each one is cut from its full zip, so the two
+# downloads always hold the same build.
+UPDATE_ZIPS=
+for arch in arm64 x64; do
+  z=$(sh scripts/update-zip.sh "$V" "$arch") || { echo "ERROR: could not build the $arch update-only zip" >&2; exit 1; }
+  echo "    ok       $z"
+  UPDATE_ZIPS="$UPDATE_ZIPS $z"
+done
+
+echo "==> [6/7] Tagging and pushing"
 git tag "v$V"
 git push origin main
 git push origin "v$V"
 
 if [ -n "$PRERELEASE" ]; then
-  echo "==> [6/6] Creating GitHub PRE-release v$V"
+  echo "==> [7/7] Creating GitHub PRE-release v$V"
 else
-  echo "==> [6/6] Creating GitHub release v$V"
+  echo "==> [7/7] Creating GitHub release v$V"
 fi
 set --
 [ -n "$PRERELEASE" ] && set -- --prerelease
-for f in $ASSETS; do
+for f in $ASSETS $UPDATE_ZIPS; do
   set -- "$@" "release/$f"
 done
 gh release create "v$V" --title "Claude Accounts v$V" --generate-notes "$@"
