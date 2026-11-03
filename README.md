@@ -93,6 +93,7 @@ The terminal commands work the same as on macOS: `add`, `login`, `use`, `bind`, 
 | `cca list [--json]` | list accounts with their emails (`--json`: for scripts and the desktop app) |
 | `cca app <name> [color]` | make a 'Claude <Name>' app in ~/Applications for that account, with a coloured icon |
 | `cca open <name>` | open the Claude app for an account (or bring it to the front) |
+| `cca chrome [<name> [<profile>\|--unlink]]` | open Chrome in the profile linked to an account; with a profile, link it; alone, list Chrome's profiles (macOS, see [Claude in Chrome per account](#claude-in-chrome-per-account)) |
 | `cca remove <name>` | log out an account; move its folders and launcher to the Trash |
 | `cca backup [--quiet\|list]` | save every account's conversations; `list` shows the snapshots |
 | `cca restore <name> [snapshot] [-n] [--account <uuid>]` | bring an account's conversations back, without overwriting anything (`-n`: dry run) |
@@ -159,6 +160,18 @@ This adds a launchd job that looks once a minute, and whenever `/Applications` c
 
 macOS may ask once for permission to control Claude. Allow it, or the copies cannot be restarted. The log is `~/.claude-accounts/autoupdate.log`. `cca autoupdate off` turns it off. To restart every open copy once by hand: `cca update`.
 
+## Claude in Chrome per account
+
+The Claude in Chrome extension signs in once per Chrome profile, and a profile holds one Claude account at a time. So give each account a Chrome profile of its own (macOS):
+
+```sh
+cca chrome                  # list Chrome's profiles and the accounts linked to them
+cca chrome supercell Work   # link an account to a profile: the name Chrome shows, or its folder ("Profile 3")
+cca chrome supercell        # open Chrome in that profile
+```
+
+Sign in to the extension once in each profile, with the account linked to it. After that, `cca chrome <name>` opens Chrome with the extension already on that account. `cca chrome <name> --unlink` drops the link, and removing an account drops it too. The links are in `~/.claude-accounts/chrome-profiles` and are saved with each backup. cca only reads Chrome's list of profiles; it changes nothing in Chrome or the extension.
+
 ## Desktop app
 
 "Claude Accounts" is one app for macOS and Windows that does the same things with buttons. Install it from [GitHub Releases](https://github.com/AbbasAlsbihawi/cca/releases): the `.dmg` on macOS, `ClaudeAccounts-Setup-<version>.exe` on Windows. It updates itself. Neither build is signed with a paid developer certificate, so the first launch is blocked: on macOS open System Settings → Privacy & Security and choose *Open Anyway*; on Windows choose *More info* → *Run anyway*.
@@ -170,6 +183,7 @@ The window is laid out like macOS System Settings: your accounts are in the side
 - open a Terminal that uses the account
 - log in again
 - sign in to its MCP servers, in Terminal (see [above](#claude-app-per-account))
+- pick its Chrome profile and open Chrome there, for Claude in Chrome (macOS, see [above](#claude-in-chrome-per-account))
 - restore conversations, with a preview first
 - remove the account, after a confirm
 - bind and unbind folders
@@ -203,6 +217,7 @@ These stay separate for each account:
 - `~/.claude-accounts/cca.zsh`: the script
 - `~/.claude-accounts/default-name`: the name of the default account
 - `~/.claude-accounts/bindings`: folder bindings
+- `~/.claude-accounts/chrome-profiles`: the Chrome profile linked to each account
 - `~/.claude-accounts/profiles/<name>/`: config folder of each account
 - `~/.claude-accounts/desktop/<name>/`: data folder of each desktop copy
 - `~/.claude-accounts/backups/`: backup snapshots
@@ -216,7 +231,7 @@ These stay separate for each account:
 
 - its Claude Code transcripts (`projects`)
 - its desktop Code tab session list (`claude-code-sessions`)
-- your folder bindings and the default account name
+- your folder bindings, the default account name and the Chrome profile links
 
 Each backup is a snapshot folder in `~/.claude-accounts/backups/<date_time>`. It uses APFS clones, so it is instant and takes almost no extra space. cca keeps the newest 30 snapshots (`CCA_BACKUP_KEEP` changes this) and logs each run in `backups/backup.log`.
 
@@ -249,7 +264,7 @@ Backups sit on the same disk. Keep Time Machine on for a disk failure.
 cca remove personal
 ```
 
-This logs the account out, drops its folder bindings, and moves its config folder, desktop data and launcher to the Trash (use Put Back to undo). Quit that account's Claude app first. For the default account only the login and launcher go; `~/.claude` stays.
+This logs the account out, drops its folder bindings and Chrome profile link, and moves its config folder, desktop data and launcher to the Trash (use Put Back to undo). Quit that account's Claude app first. For the default account only the login and launcher go; `~/.claude` stays.
 
 ## Troubleshooting
 

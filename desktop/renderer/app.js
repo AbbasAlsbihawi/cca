@@ -47,7 +47,8 @@ function render() {
   } else {
     $('page-title').textContent = a ? a.name : 'Claude Accounts';
     renderDetail($('detail'), a, {
-      colors: colors(), snapshots: state.data && state.data.snapshots, refresh, openRestore, openAdd, removeAccount,
+      colors: colors(), snapshots: state.data && state.data.snapshots, chromeProfiles: state.data && state.data.chromeProfiles,
+      refresh, openRestore, openAdd, removeAccount,
     });
   }
   $('btn-remove').disabled = state.page !== 'account' || !a;
