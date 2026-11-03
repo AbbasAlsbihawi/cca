@@ -47,7 +47,7 @@ mode() { stat -f %Lp $1 }
 
 # Stop before any test if cca would still reach a folder outside the throwaway HOME.
 mk_home
-for out in "${(@f)$(run 'print -rl -- $CCA_HOME $CCA_MAIN_DIR $CCA_MAIN_JSON $CCA_MAIN_APP_DATA $CCA_LAUNCH_AGENTS')}"; do
+for out in "${(@f)$(run 'print -rl -- $CCA_HOME $CCA_MAIN_DIR $CCA_MAIN_JSON $CCA_MAIN_APP_DATA $CCA_LAUNCH_AGENTS $CCA_CHROME_DATA')}"; do
   [[ $out == $H/* ]] || { print -ru2 -- "tests: cca would use $out, outside the throwaway HOME; stopping"; exit 1 }
 done
 
@@ -245,6 +245,7 @@ for n in Personal Work; do
   print -r -- ${(L)n} > "$H/Applications/Claude $n.app/Contents/Resources/cca-account"
 done
 print -r -- "$T/work/p"$'\t'"personal"$'\n'"$T/work/o"$'\t'"other" > $A/bindings
+print -r -- "personal"$'\t'"Profile 3"$'\n'"other"$'\t'"Default" > $A/chrome-profiles
 rm -f $T/claude.log
 out=$(run 'ps() { :; }; CCA_TRASH=$T/trash cca remove personal')
 has "remove: message" "Removed 'personal'" "$out"
@@ -253,6 +254,7 @@ has "remove: logs out the account" "CFG=$A/profiles/personal ARGS=auth logout" "
   && ok "remove: folders and launcher gone" || bad "remove: folders and launcher gone" "gone" "still there"
 eq "remove: 3 items in the Trash" 3 "$(ls $T/trash | wc -l | tr -d ' ')"
 eq "remove: only its bindings dropped" "$T/work/o"$'\t'"other" "$(<$A/bindings)"
+eq "remove: only its Chrome link dropped" "other"$'\t'"Default" "$(<$A/chrome-profiles)"
 [[ -d $A/profiles/other ]] && ok "remove: other accounts untouched" || bad "remove: other accounts untouched" "kept" "gone"
 rm -f $T/claude.log
 out=$(run 'ps() { :; }; CCA_TRASH=$T/trash cca remove work')
@@ -532,6 +534,51 @@ out=$(run 'cca list --json | jq -e . >/dev/null; echo $?; cca use personal >/dev
 eq "cca use sets CCA_ACCOUNT" $'0\npersonal' "$out"
 eq "CCA_ACCOUNT picks the account (the app's New Terminal)" "CFG=$A/profiles/personal ARGS=x" "$(run '( export CCA_ACCOUNT=personal; claude x )')"
 unset ODD
+
+# 22. cca chrome
+mk_home; prof personal; prof other
+CD="$H/Library/Application Support/Google/Chrome"
+mkdir -p "$CD" $T/Chrome.app
+print -r -- '{"profile":{"info_cache":{"Profile 3":{"name":"Work"},"Default":{"name":"Person 1"}}}}' > "$CD/Local State"
+CSTUBS='CCA_CHROME_APP=$T/Chrome.app; open() { echo OPEN "$@"; }'
+crun() { run "$CSTUBS"$'\n'"$1"; }
+out=$(crun 'cca chrome')
+eq "chrome: lists the profiles, sorted by folder" "$(printf '%-12s %-20s %s\n' Default 'Person 1' '' 'Profile 3' Work '')" "$out"
+out=$(crun 'cca chrome personal'); rc=$?
+no "chrome: no link yet fails" $rc
+has "chrome: says how to link" "cca chrome personal <profile>" "$out"
+out=$(crun 'cca chrome personal work')
+has "chrome: links by the name Chrome shows, any case" "Linked 'personal' to the Chrome profile 'Work'" "$out"
+eq "chrome: link saved as the folder" "personal"$'\t'"Profile 3" "$(<$A/chrome-profiles)"
+eq "chrome: opens Chrome in the linked profile" "OPEN -na $T/Chrome.app --args --profile-directory=Profile 3" "$(crun 'cca chrome personal')"
+crun 'cca chrome other Default' >/dev/null
+crun 'cca chrome personal "Profile 3"' >/dev/null
+eq "chrome: one line per account, relinking replaces" "other"$'\t'"Default"$'\n'"personal"$'\t'"Profile 3" "$(<$A/chrome-profiles)"
+has "chrome: the list shows linked accounts" "-> personal" "$(crun 'cca chrome')"
+out=$(crun 'cca chrome other nope'); rc=$?
+no "chrome: unknown profile fails" $rc
+has "chrome: unknown profile message" "no Chrome profile 'nope'" "$out"
+eq "chrome: a failed link keeps the old one" "other"$'\t'"Default"$'\n'"personal"$'\t'"Profile 3" "$(<$A/chrome-profiles)"
+out=$(crun 'cca chrome ghost Default'); rc=$?
+no "chrome: unknown account fails" $rc
+J=$(jrun 'cca list --json')
+eq "json: chromeProfiles" '[{"dir":"Default","name":"Person 1"},{"dir":"Profile 3","name":"Work"}]' "$(print -r -- $J | jq -c .chromeProfiles)"
+eq "json: an account's chrome profile" "Profile 3" "$(print -r -- $J | jq -r '.accounts[] | select(.name=="personal") | .chrome')"
+eq "json: no link is null" null "$(print -r -- $J | jq -r '.accounts[] | select(.name=="work") | .chrome')"
+crun 'cca chrome personal --unlink' >/dev/null
+eq "chrome: --unlink drops only that link" "other"$'\t'"Default" "$(<$A/chrome-profiles)"
+print -r -- '{"profile":{"info_cache":{"Profile 3":{"name":"Work"}}}}' > "$CD/Local State"
+out=$(crun 'cca chrome other'); rc=$?
+no "chrome: a profile Chrome no longer has is not opened" $rc
+has "chrome: says the profile is gone" "is gone" "$out"
+out=$(crun 'CCA_CHROME_APP=$T/none.app; cca chrome other Work >/dev/null; cca chrome other'); rc=$?
+no "chrome: no Chrome app fails" $rc
+has "chrome: says Chrome is missing" "Google Chrome is not at" "$out"
+rm -f "$CD/Local State"
+out=$(crun 'cca chrome'); rc=$?
+no "chrome: no Local State fails" $rc
+eq "json: chromeProfiles empty without Chrome" '[]' "$(jrun 'cca list --json' | jq -c .chromeProfiles)"
+unset CD CSTUBS
 
 print -r -- "$pass passed, $fail failed"
 (( fail == 0 ))

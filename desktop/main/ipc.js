@@ -4,7 +4,7 @@ const { app, dialog, ipcMain, systemPreferences } = require('electron');
 const { runCca, listAccounts, bus } = require('./cca');
 const { runInteractive } = require('./interactive');
 
-const RUN_VERBS = new Set(['open', 'app', 'bind', 'unbind', 'backup', 'autobackup', 'autoupdate', 'update', 'remove', 'restore']);
+const RUN_VERBS = new Set(['open', 'app', 'chrome', 'bind', 'unbind', 'backup', 'autobackup', 'autoupdate', 'update', 'remove', 'restore']);
 // `update` waits up to a minute for each open Claude copy to quit; killing it half way
 // would leave the copies it already quit closed.
 const SLOW_MS = { update: 15 * 60 * 1000 };

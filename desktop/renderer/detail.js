@@ -1,5 +1,5 @@
 // Account page: a header, then grouped rows, in the style of System Settings.
-import { runLogged, logError } from './output.js';
+import { runLogged, withBusy, logError } from './output.js';
 import { avatar, colorCss } from './sidebar.js';
 import { el, button, row, group, value } from './ui.js';
 
@@ -53,6 +53,40 @@ export function renderDetail(root, a, ctx) {
     }
   }
 
+  // Chrome: Claude in Chrome signs in once per Chrome profile, so each account can
+  // have a profile of its own. Only cca.zsh reports the profiles; Windows has none.
+  const profiles = Array.isArray(ctx.chromeProfiles) ? ctx.chromeProfiles : [];
+  let chromeRow = null;
+  if (profiles.length) {
+    const known = profiles.some((p) => p.dir === a.chrome);
+    const pick = el('select');
+    pick.setAttribute('aria-label', 'Chrome profile');
+    const none = el('option', null, 'None');
+    none.value = '';
+    pick.appendChild(none);
+    for (const p of profiles) {
+      const o = el('option', null, p.name || p.dir);
+      o.value = p.dir;
+      pick.appendChild(o);
+    }
+    if (a.chrome && !known) {
+      const o = el('option', null, `${a.chrome} (gone)`);
+      o.value = a.chrome;
+      o.disabled = true;
+      pick.appendChild(o);
+    }
+    pick.value = a.chrome || '';
+    pick.addEventListener('change', () => withBusy(pick, async () => {
+      await runLogged(pick.value ? ['chrome', a.name, pick.value] : ['chrome', a.name, '--unlink']);
+      await ctx.refresh();
+    }));
+    const openChrome = act('Open Chrome', () => runLogged(['chrome', a.name]));
+    openChrome.disabled = !known;
+    chromeRow = row('Chrome', known
+      ? 'Opens Chrome in this profile. Sign in to Claude in Chrome there once with this account.'
+      : 'Pick the Chrome profile where Claude in Chrome uses this account.', pick, openChrome);
+  }
+
   page.appendChild(group(null, [
     row('Claude app', a.app ? null : 'Not made yet', a.app ? value(a.app) : null, a.app ? act('Remake App', () => makeApp()) : null),
     swatches && row('Colour', 'The colour of its Claude app icon.', swatches),
@@ -60,6 +94,7 @@ export function renderDetail(root, a, ctx) {
     row('MCP servers', 'Opens Claude in Terminal at its list of MCP servers. A sign-in there reaches this account even while other copies are open.',
       act('Sign In…', () => interactive(['mcp', a.name]))),
     row('Terminal', 'A shell that uses this account.', act('Open Terminal', () => interactive(['shell', a.name]))),
+    chromeRow,
   ]));
 
   // Folders: in each one, and its subfolders, cca always uses this account.

@@ -22,6 +22,8 @@
 : ${CCA_MAIN_JSON:=$HOME/.claude.json}
 : ${CCA_MAIN_APP_DATA:="$HOME/Library/Application Support/Claude"}
 : ${CCA_LAUNCH_AGENTS:=$HOME/Library/LaunchAgents}
+: ${CCA_CHROME_APP:="/Applications/Google Chrome.app"}
+: ${CCA_CHROME_DATA:="$HOME/Library/Application Support/Google/Chrome"}
 typeset -ga CCA_SHARED=(settings.json CLAUDE.md skills plugins agents commands output-styles keybindings.json)
 
 # Remember which file this shell loaded and when it changed, so `cca` can
@@ -290,6 +292,106 @@ _cca_open() {
   fi
 }
 
+# Claude in Chrome signs in once per Chrome profile, so each account can have a
+# profile of its own: `cca chrome <name> <profile>` links them in
+# $CCA_HOME/chrome-profiles ("name<TAB>profile folder"), and `cca chrome <name>`
+# opens Chrome in that profile.
+
+# Prints "folder<TAB>name" for each Chrome profile, from Chrome's Local State.
+_cca_chrome_profiles() {
+  local st="$CCA_CHROME_DATA/Local State"
+  [[ -r $st ]] && (( $+commands[jq] )) || return 0
+  jq -r '.profile.info_cache // {} | to_entries | sort_by(.key)[] | "\(.key)\t\(.value.name // .key)"' $st 2>/dev/null
+}
+
+# Prints the Chrome profile folder linked to an account.
+_cca_chrome_linked() {
+  local f=$CCA_HOME/chrome-profiles n p
+  [[ -r $f ]] || return 1
+  while IFS=$'\t' read -r n p || [[ -n $n ]]; do
+    [[ $n == "$1" && -n $p ]] && { print -r -- $p; return 0 }
+  done < $f
+  return 1
+}
+
+# Links an account to a Chrome profile folder; an empty folder drops the link.
+_cca_chrome_set() {
+  emulate -L zsh
+  local f=$CCA_HOME/chrome-profiles line
+  local -a keep
+  if [[ -r $f ]]; then
+    for line in "${(@f)$(<$f)}"; do
+      [[ -z $line || ${line%%$'\t'*} == "$1" ]] || keep+=($line)
+    done
+  fi
+  [[ -n $2 ]] && keep+=("$1"$'\t'"$2")
+  if (( $#keep )); then print -rl -- $keep > $f; else : > $f; fi
+}
+
+_cca_chrome() {
+  emulate -L zsh
+  local name=$1 want=$2 line dir pname n
+  local -a profs found accts
+  profs=(${(f)"$(_cca_chrome_profiles)"})
+  if (( ! $#profs )); then
+    if (( ! $+commands[jq] )); then _cca_err "cca chrome needs jq (brew install jq)"
+    else _cca_err "no Chrome profiles found in $CCA_CHROME_DATA. Open Google Chrome once first."
+    fi
+    return 1
+  fi
+  # No account: list the profiles and the accounts linked to each.
+  if [[ -z $name ]]; then
+    for line in $profs; do
+      dir=${line%%$'\t'*} pname=${line#*$'\t'} accts=()
+      for n in ${(f)"$(_cca_profiles)"}; do
+        [[ $(_cca_chrome_linked $n) == "$dir" ]] && accts+=$n
+      done
+      printf '%-12s %-20s %s\n' $dir $pname "${accts:+-> ${(j:, :)accts}}"
+    done
+    return 0
+  fi
+  if ! _cca_exists "$name"; then
+    _cca_err "usage: cca chrome [<name> [<profile>|--unlink]]. Accounts: ${(j:, :)${(f)"$(_cca_profiles)"}}"
+    return 1
+  fi
+  if [[ $want == --unlink ]]; then
+    _cca_chrome_set $name '' && print -r -- "'$name' has no Chrome profile now."
+    return
+  fi
+  # A profile: its folder name ("Profile 3"), or the name Chrome shows ("Work").
+  if [[ -n $want ]]; then
+    for line in $profs; do [[ ${line%%$'\t'*} == "$want" ]] && found=($line); done
+    if (( ! $#found )); then
+      for line in $profs; do [[ ${(L)${line#*$'\t'}} == ${(L)want} ]] && found+=($line); done
+    fi
+    if (( $#found != 1 )); then
+      (( $#found )) && _cca_err "more than one Chrome profile is called '$want'; use its folder name. See: cca chrome" \
+        || _cca_err "no Chrome profile '$want'. See: cca chrome"
+      return 1
+    fi
+    mkdir -p $CCA_HOME && _cca_chrome_set $name ${found[1]%%$'\t'*} || return 1
+    print -r -- "Linked '$name' to the Chrome profile '${found[1]#*$'\t'}'. Open it: cca chrome $name"
+    return 0
+  fi
+  if ! dir=$(_cca_chrome_linked $name); then
+    _cca_err "'$name' has no Chrome profile yet. Link one: cca chrome $name <profile>  (see: cca chrome)"
+    return 1
+  fi
+  # A folder Chrome no longer knows would open as a new, empty profile.
+  found=()
+  for line in $profs; do [[ ${line%%$'\t'*} == "$dir" ]] && found=($line); done
+  if (( ! $#found )); then
+    _cca_err "the Chrome profile '$dir' linked to '$name' is gone. Link another: cca chrome $name <profile>"
+    return 1
+  fi
+  if [[ ! -d $CCA_CHROME_APP ]]; then
+    _cca_err "Google Chrome is not at $CCA_CHROME_APP"
+    return 1
+  fi
+  # -n starts Chrome's launcher even when Chrome is open; it hands the profile to the running Chrome.
+  open -na $CCA_CHROME_APP --args --profile-directory=$dir
+}
+
 # Colours `cca app` can tint the launcher icon with.
 typeset -ga _CCA_COLORS=(red orange yellow green teal blue purple pink gray)
 
@@ -472,6 +574,7 @@ _cca_remove() {
   data=$(_cca_app_data $name)
   _cca_exec $name claude auth logout >/dev/null 2>&1
   _cca_drop_account_bindings $name
+  [[ -r $CCA_HOME/chrome-profiles ]] && _cca_chrome_set $name ''
   [[ -e $app/Contents/Resources/cca-account ]] && _cca_trash $app
   [[ -n $data && -d $data ]] && _cca_trash $data
   [[ -n $dir && -d $dir ]] && _cca_trash $dir
@@ -604,7 +707,7 @@ _cca_backup() {
       accts+=got
     done
     mkdir -p $snap/cca
-    for src in bindings default-name; do
+    for src in bindings default-name chrome-profiles; do
       [[ -f $CCA_HOME/$src ]] && cp -p $CCA_HOME/$src $snap/cca/$src
     done
     snaps=(${(f)"$(_cca_snapshots)"})
@@ -935,7 +1038,7 @@ _cca_jarr() {
 # Prints everything `cca list --json` reports, as one JSON object.
 _cca_list_json() {
   emulate -L zsh
-  local name dir json email org app res color p n sep accts
+  local name dir json email org app res color p n sep accts chrome line csep
   local default=$(_cca_default_name 2>/dev/null)
   local -a folders
   for name in ${(f)"$(_cca_profiles 2>/dev/null)"}; do
@@ -956,11 +1059,16 @@ _cca_list_json() {
     fi
     accts+="$sep{\"name\":$(_cca_jstr $name),\"isDefault\":$([[ $name == "$default" ]] && print true || print false)"
     accts+=",\"email\":$(_cca_jstr $email),\"org\":$(_cca_jstr $org),\"loggedIn\":$([[ -n $email ]] && print true || print false)"
-    accts+=",\"color\":$(_cca_jstr $color),\"app\":$(_cca_jstr $app)"
+    accts+=",\"color\":$(_cca_jstr $color),\"app\":$(_cca_jstr $app),\"chrome\":$(_cca_jstr "$(_cca_chrome_linked $name 2>/dev/null)")"
     accts+=",\"running\":$(_cca_app_pid $name >/dev/null 2>&1 && print true || print false),\"folders\":$(_cca_jarr $folders)}"
     sep=,
   done
-  print -r -- "{\"version\":1,\"default\":$(_cca_jstr $default),\"colors\":$(_cca_jarr $_CCA_COLORS),\"autobackup\":$([[ -f $CCA_LAUNCH_AGENTS/dev.cca.backup.plist ]] && print true || print false),\"autoupdate\":$([[ -f $CCA_LAUNCH_AGENTS/dev.cca.update.plist ]] && print true || print false),\"snapshots\":$(_cca_jarr ${(f)"$(_cca_snapshots 2>/dev/null)"}),\"accounts\":[$accts]}"
+  # Chrome profiles as [{"dir":..,"name":..}]; empty when Chrome or jq is missing.
+  for line in ${(f)"$(_cca_chrome_profiles 2>/dev/null)"}; do
+    chrome+="$csep{\"dir\":$(_cca_jstr ${line%%$'\t'*}),\"name\":$(_cca_jstr ${line#*$'\t'})}"
+    csep=,
+  done
+  print -r -- "{\"version\":1,\"chromeProfiles\":[$chrome],\"default\":$(_cca_jstr $default),\"colors\":$(_cca_jarr $_CCA_COLORS),\"autobackup\":$([[ -f $CCA_LAUNCH_AGENTS/dev.cca.backup.plist ]] && print true || print false),\"autoupdate\":$([[ -f $CCA_LAUNCH_AGENTS/dev.cca.update.plist ]] && print true || print false),\"snapshots\":$(_cca_jarr ${(f)"$(_cca_snapshots 2>/dev/null)"}),\"accounts\":[$accts]}"
 }
 
 _cca_list() {
@@ -1010,7 +1118,10 @@ _cca_help() {
   cca app <name> [color]     make a 'Claude <Name>' app in ~/Applications for that account
                              (colors: red orange yellow green teal blue purple pink gray)
   cca open <name>            open the Claude app for an account (or bring it to the front)
-  cca remove <name>          log out an account; move its folders and launcher to the Trash
+  cca chrome [<name> [<profile>|--unlink]]
+                             open Chrome in the profile linked to an account; with a profile, link it
+                             (cca chrome alone lists Chrome's profiles)
+  cca remove <name>         log out an account; move its folders and launcher to the Trash
   cca backup [--quiet|list]  save every account's conversations (keeps the newest 30)
   cca restore <name> [snap] [-n] [--account <uuid>]
                              bring an account's conversations back (never overwrites; -n: dry run)
@@ -1046,6 +1157,7 @@ cca() {
     run)            _cca_run "$@" ;;
     app)            _cca_app "$@" ;;
     open)           _cca_open "$@" ;;
+    chrome)         _cca_chrome "$@" ;;
     remove|rm)      _cca_remove "$@" ;;
     import)         _cca_restore "$@" ;;
     backup)         _cca_backup "$@" ;;
@@ -1077,12 +1189,12 @@ claude() {
 }
 
 _cca_complete() {
-  local -a cmds=(status list add login use bind unbind run app open remove backup restore autobackup update autoupdate help)
+  local -a cmds=(status list add login use bind unbind run app open chrome remove backup restore autobackup update autoupdate help)
   if (( CURRENT == 2 )); then
     compadd -a cmds
   elif (( CURRENT == 3 )); then
     case $words[2] in
-      login|use|bind|run|app|open|remove|restore) compadd -- ${(f)"$(_cca_profiles)"} ;;
+      login|use|bind|run|app|open|chrome|remove|restore) compadd -- ${(f)"$(_cca_profiles)"} ;;
       list|ls)            compadd -- --json ;;
       backup)             compadd -- list --quiet ;;
       autobackup|autoupdate) compadd -- on off status ;;
@@ -1090,6 +1202,8 @@ _cca_complete() {
     esac
   elif (( CURRENT == 4 )) && [[ $words[2] == bind ]]; then
     _files -/
+  elif (( CURRENT == 4 )) && [[ $words[2] == chrome ]]; then
+    compadd -- --unlink ${${(f)"$(_cca_chrome_profiles)"}%%$'\t'*}
   elif (( CURRENT >= 4 )) && [[ $words[2] == restore ]]; then
     (( CURRENT == 4 )) && compadd -- ${(f)"$(_cca_snapshots)"}
     compadd -- --dry-run --account
