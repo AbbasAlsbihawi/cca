@@ -33,6 +33,7 @@ function buildAppMenu(actions) {
       label: app.name,
       submenu: [
         { role: 'about' },
+        { label: 'Check for Updates…', click: toUi('check-updates') },
         { type: 'separator' },
         { label: 'Settings…', accelerator: 'Cmd+,', click: toUi('general') },
         { type: 'separator' },
@@ -54,7 +55,11 @@ function buildAppMenu(actions) {
   if (!isMac) {
     template.unshift({
       label: 'File',
-      submenu: [{ label: 'Quit', accelerator: 'Alt+F4', click: () => app.quit() }],
+      submenu: [
+        { label: 'Check for Updates', click: toUi('check-updates') },
+        { type: 'separator' },
+        { label: 'Quit', accelerator: 'Alt+F4', click: () => app.quit() },
+      ],
     });
   }
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));

@@ -3,6 +3,7 @@
 const { app, dialog, ipcMain, systemPreferences } = require('electron');
 const { runCca, listAccounts, bus } = require('./cca');
 const { runInteractive } = require('./interactive');
+const { checkNow, updatesEnabled } = require('./updater');
 
 const RUN_VERBS = new Set(['open', 'app', 'chrome', 'bind', 'unbind', 'backup', 'autobackup', 'autoupdate', 'update', 'remove', 'restore']);
 // `update` waits up to a minute for each open Claude copy to quit; killing it half way
@@ -50,8 +51,11 @@ function registerIpc(win) {
       platform: process.platform,
       importSupported: process.platform === 'darwin',
       accent: /^[0-9a-f]{6,8}$/i.test(accent || '') ? '#' + accent.slice(0, 6) : '',
+      updates: updatesEnabled(),
     };
   });
+
+  ipcMain.handle('update:check', () => checkNow());
 
   // A native confirmation instead of window.confirm. For a destructive action the
   // safe choice, Cancel, is the default button, as the macOS guidelines ask.

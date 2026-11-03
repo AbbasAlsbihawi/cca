@@ -52,7 +52,15 @@ export function renderGeneral(root, ctx) {
   bar.hidden = true;
   const status = el('small', null, '');
   status.id = 'gen-update-text';
-  const updateRow = row('Software update', null, bar);
+  // Development builds have no updater, so no button there.
+  let checkBtn = null;
+  if (ctx.info && ctx.info.updates) {
+    checkBtn = el('button', '', 'Check Now');
+    checkBtn.type = 'button';
+    checkBtn.id = 'gen-update-check';
+    checkBtn.addEventListener('click', () => ctx.checkUpdates());
+  }
+  const updateRow = row('Software update', null, bar, checkBtn);
   updateRow.querySelector('.k').appendChild(status);
   page.appendChild(group('Claude Accounts', [
     row('Version', null, value(ctx.info && ctx.info.version ? ctx.info.version : '')),

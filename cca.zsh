@@ -1142,6 +1142,13 @@ cca() {
   zstat -A mtime +mtime -- $src 2>/dev/null
   if (( ! $+functions[_cca_status] )) || [[ $mtime[1] != $CCA_LOADED ]]; then
     source $src
+    # This call still runs the old body, which may not know a new command:
+    # hand it to the new cca, once (the local is seen by that call).
+    if (( ! $+_cca_reloaded )); then
+      local _cca_reloaded=1
+      cca "$@"
+      return
+    fi
   fi
   emulate -L zsh
   local cmd=${1:-status}

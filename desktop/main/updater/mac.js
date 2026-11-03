@@ -25,6 +25,9 @@ const MIN_ZIP_BYTES = 1024 * 1024; // a real app zip is tens of MB; less means a
 const MIN_UPDATE_ZIP_BYTES = 64 * 1024; // the update-only zip is about 1 MB: the app code and no Electron
 const MAX_ZIP_BYTES = 600 * 1024 * 1024;
 const MAX_REDIRECTS = 4;
+// A dropped connection is common on a slow line; each retry picks up where the last stopped.
+const DOWNLOAD_ATTEMPTS = 5;
+const RETRY_DELAYS_MS = [2000, 5000, 10000, 20000];
 
 let busy = false; // one check at a time: the 4h timer must not stack downloads
 const deferred = new Set(); // versions the user answered "Later" to this run
@@ -50,7 +53,8 @@ function open(url, headers, depth = 0) {
         resolve(open(new URL(to, url).toString(), headers, depth + 1));
         return;
       }
-      if (code !== 200) { res.resume(); reject(new Error(`GitHub returned HTTP ${code}`)); return; }
+      // 206 answers a Range request: the rest of a download that was cut off.
+      if (code !== 200 && code !== 206) { res.resume(); reject(new Error(`GitHub returned HTTP ${code}`)); return; }
       resolve(res);
     });
     req.setTimeout(NET_TIMEOUT_MS, () => req.destroy(new Error('network timeout')));
@@ -155,21 +159,57 @@ function swapBlocker(bundle) {
 
 // --- download and unpack ---------------------------------------------------
 
-async function download(asset, zip, version, send, minBytes = MIN_ZIP_BYTES) {
-  const res = await open(asset.browser_download_url, { 'User-Agent': userAgent(), Accept: 'application/octet-stream' });
-  res.setTimeout(NET_TIMEOUT_MS, () => res.destroy(new Error('download stalled')));
+// Failures of the line, not of the release: worth another try.
+function isTransient(err) {
+  const msg = String((err && err.message) || '');
+  const code = err && err.code;
+  return /^(aborted|download stalled|network timeout|socket hang up)$/.test(msg)
+    || /HTTP 5\d\d/.test(msg)
+    || ['ECONNRESET', 'ETIMEDOUT', 'EPIPE', 'ENOTFOUND', 'EAI_AGAIN', 'ECONNREFUSED', 'ENETUNREACH',
+      'EHOSTUNREACH', 'ERR_STREAM_PREMATURE_CLOSE'].includes(code);
+}
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function sizeOnDisk(file) {
+  try { return fs.statSync(file).size; } catch (e) { return 0; }
+}
+
+async function download(asset, zip, version, send, minBytes = MIN_ZIP_BYTES) {
   const expected = Number(asset.size) > 0 ? Number(asset.size) : 0;
-  let got = 0;
+  let have = 0; // bytes already on disk from an attempt that was cut off
   let shown = -1;
-  res.on('data', (chunk) => {
-    got += chunk.length;
-    if (got > MAX_ZIP_BYTES) { res.destroy(new Error('download is far larger than any release')); return; }
-    if (!expected) return;
-    const pct = Math.min(100, Math.floor((got / expected) * 100));
-    if (pct !== shown) { shown = pct; send({ state: 'downloading', version, percent: pct, transferred: got, total: expected }); }
-  });
-  await pipeline(res, fs.createWriteStream(zip));
+  for (let attempt = 1; ; attempt += 1) {
+    if (expected && have === expected) break; // cut off after the last byte arrived
+    try {
+      const headers = { 'User-Agent': userAgent(), Accept: 'application/octet-stream' };
+      if (have > 0) headers.Range = `bytes=${have}-`;
+      const res = await open(asset.browser_download_url, headers);
+      // A server that ignores the Range sends the whole file again: start over then.
+      const resume = have > 0 && res.statusCode === 206;
+      if (!resume) have = 0;
+      res.setTimeout(NET_TIMEOUT_MS, () => res.destroy(new Error('download stalled')));
+      let got = have;
+      res.on('data', (chunk) => {
+        got += chunk.length;
+        if (got > MAX_ZIP_BYTES) { res.destroy(new Error('download is far larger than any release')); return; }
+        if (!expected) return;
+        const pct = Math.min(100, Math.floor((got / expected) * 100));
+        if (pct !== shown) { shown = pct; send({ state: 'downloading', version, percent: pct, transferred: got, total: expected }); }
+      });
+      // Writing at the offset (not appending) keeps the file right even if a write from
+      // the attempt before lands late: every byte goes to its own place.
+      await pipeline(res, fs.createWriteStream(zip, resume ? { flags: 'r+', start: have } : { flags: 'w' }));
+      break;
+    } catch (err) {
+      if (attempt >= DOWNLOAD_ATTEMPTS || !isTransient(err)) throw err;
+      have = sizeOnDisk(zip);
+      if (expected && have > expected) have = 0;
+      const pct = expected ? Math.min(100, Math.floor((have / expected) * 100)) : undefined;
+      send({ state: 'downloading', version, percent: pct, transferred: have, total: expected, retrying: true });
+      await sleep(RETRY_DELAYS_MS[Math.min(attempt, RETRY_DELAYS_MS.length) - 1]);
+    }
+  }
 
   // Prove the download finished: the declared size when GitHub gave us one, and
   // a floor otherwise. A truncated zip must never reach the swap.
@@ -384,9 +424,11 @@ function cleanup(dir) {
   try { fs.rmSync(dir, { recursive: true, force: true }); } catch (e) { /* temp dir: leave it to the OS */ }
 }
 
-async function checkForUpdates(win, send) {
+// opts.manual: the user asked (Check Now), so a version they put off is offered again.
+async function checkForUpdates(win, send, opts = {}) {
   if (busy) return;
   busy = true;
+  if (opts.manual) deferred.clear();
   let work = null;
   try {
     send({ state: 'checking' });
@@ -489,7 +531,9 @@ async function checkForUpdates(win, send) {
   } catch (err) {
     cleanup(work);
     work = null;
-    send({ state: 'error', message: (err && (err.message || String(err))) || 'update failed' });
+    // "aborted" says nothing to a person; a dropped line gets a sentence and a later retry.
+    if (isTransient(err)) send({ state: 'error', transient: true, message: 'The download was interrupted: the connection dropped.' });
+    else send({ state: 'error', message: (err && (err.message || String(err))) || 'update failed' });
   } finally {
     cleanup(work);
     busy = false;

@@ -233,6 +233,22 @@ out=$(env -u CLAUDECODE HOME=$H PATH=$T/bin:$PATH T=$T zsh -f -c '
 eq "cca reloads itself after the file changes" RELOADED "$out"
 out=$(run 'cca help' | head -1)
 has "unchanged file: normal help" "cca — switch" "$out"
+# A command the update added works on the first call, not only on the second.
+cp $REPO/cca.zsh $T/cca-copy.zsh
+out=$(env -u CLAUDECODE HOME=$H PATH=$T/bin:$PATH T=$T zsh -f -c '
+  source $T/cca-copy.zsh
+  perl -pi -e "s/^(\s+help\|-h\|--help\))/    newverb) print -r -- NEWVERB; return 3 ;;\n\$1/" $T/cca-copy.zsh
+  touch -t 203001010000 $T/cca-copy.zsh
+  cca newverb; print -r -- "rc=$?"' 2>&1)
+eq "a new command works on the first call after an update" "NEWVERB"$'\n'"rc=3" "$out"
+# A file that never loads its helpers is sourced again once, then the call goes on.
+cp $REPO/cca.zsh $T/cca-copy.zsh
+out=$(env -u CLAUDECODE HOME=$H PATH=$T/bin:$PATH T=$T zsh -f -c '
+  source $T/cca-copy.zsh
+  print -r -- "unfunction _cca_status" >> $T/cca-copy.zsh
+  touch -t 203001010000 $T/cca-copy.zsh
+  cca help | head -1' 2>&1)
+has "a broken update does not reload in a loop" "cca — switch" "$out"
 
 # 15. cca remove
 mk_home

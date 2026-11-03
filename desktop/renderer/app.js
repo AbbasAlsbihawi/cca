@@ -43,7 +43,7 @@ function render() {
   const a = current();
   if (state.page === 'general') {
     $('page-title').textContent = 'General';
-    renderGeneral($('detail'), { data: state.data, info: state.info, refresh });
+    renderGeneral($('detail'), { data: state.data, info: state.info, refresh, checkUpdates });
   } else {
     $('page-title').textContent = a ? a.name : 'Claude Accounts';
     renderDetail($('detail'), a, {
@@ -128,8 +128,10 @@ function updateText(s) {
   switch (s.state) {
     case 'available': return s.message || 'Update' + v + ' available';
     case 'downloading': {
-      if (!Number.isFinite(s.percent)) return 'Downloading update' + v + '...';
       const size = s.total > 0 && s.transferred >= 0 ? ` (${mb(s.transferred)} of ${mb(s.total)} MB)` : '';
+      // The connection dropped; the updater carries on from where it stopped.
+      if (s.retrying) return 'Connection dropped, reconnecting...' + (Number.isFinite(s.percent) ? ' ' + s.percent + '%' + size : '');
+      if (!Number.isFinite(s.percent)) return 'Downloading update' + v + '...';
       return 'Downloading' + v + ': ' + s.percent + '%' + size;
     }
     case 'unpacking': return 'Unpacking update' + v + '...';
@@ -145,7 +147,7 @@ function shortText(s) {
   if (!s || !s.state) return '';
   switch (s.state) {
     case 'available': return s.message ? '' : 'Update ' + (s.version || '');
-    case 'downloading': return Number.isFinite(s.percent) ? s.percent + '%' : 'Downloading';
+    case 'downloading': return s.retrying ? 'Reconnecting' : Number.isFinite(s.percent) ? s.percent + '%' : 'Downloading';
     case 'unpacking': return 'Unpacking';
     case 'ready': return 'Restart to update';
     case 'error': return 'Update failed';
@@ -174,6 +176,16 @@ function showUpdate(s) {
   const gen = $('gen-update-text');
   if (gen) gen.textContent = text || 'Checks for updates when the app opens, then every 4 hours.';
   setBar($('gen-update-bar'), s);
+  const btn = $('gen-update-check');
+  if (btn) btn.disabled = ['checking', 'available', 'downloading', 'unpacking'].includes(s && s.state) && !(s && s.message);
+}
+
+// Check Now: the result arrives through the usual update status.
+async function checkUpdates() {
+  showUpdate({ state: 'checking' });
+  try {
+    if (!(await window.cca.checkUpdates())) showUpdate({ state: 'error', message: 'This build does not update itself.' });
+  } catch (e) { showUpdate({ state: 'error', message: 'Could not start the check.' }); }
 }
 
 // --- start --------------------------------------------------------------------
@@ -206,6 +218,7 @@ async function init() {
       const a = current();
       if (action === 'add') openAdd();
       else if (action === 'general') go('general');
+      else if (action === 'check-updates') { go('general'); checkUpdates(); }
       else if (action === 'restore' && a) openRestore(a.name);
       else if (action === 'open' && a && a.app) runLogged(['open', a.name]);
     });
