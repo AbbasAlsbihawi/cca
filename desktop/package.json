@@ -1,6 +1,6 @@
 {
   "name": "claude-accounts",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "Claude Accounts: switch between Claude Code accounts from the menu bar or tray.",
   "author": "Abbas Alsbihawi",
   "license": "MIT",
@@ -47,7 +47,9 @@
     "afterPack": "main/afterPack.js",
     "mac": {
       "category": "public.app-category.developer-tools",
-      "electronLanguages": ["en"],
+      "electronLanguages": [
+        "en"
+      ],
       "identity": "-",
       "hardenedRuntime": false,
       "artifactName": "ClaudeAccounts-${version}-${arch}-mac.${ext}",
