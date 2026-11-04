@@ -594,6 +594,26 @@ rm -f "$CD/Local State"
 out=$(crun 'cca chrome'); rc=$?
 no "chrome: no Local State fails" $rc
 eq "json: chromeProfiles empty without Chrome" '[]' "$(jrun 'cca list --json' | jq -c .chromeProfiles)"
+# macOS does not let the desktop app read Chrome's folder: cca uses the profiles it last read.
+print -r -- '{"profile":{"info_cache":{"Profile 3":{"name":"Work"},"Default":{"name":"Person 1"}}}}' > "$CD/Local State"
+rm -f $A/chrome-profiles-seen
+crun 'cca chrome personal Work' >/dev/null
+eq "chrome: a read keeps the profiles" "Default"$'\t'"Person 1"$'\n'"Profile 3"$'\t'"Work" "$(<$A/chrome-profiles-seen 2>&1)"
+chmod 000 "$CD/Local State"
+eq "json: unreadable Local State uses the kept profiles" '[{"dir":"Default","name":"Person 1"},{"dir":"Profile 3","name":"Work"}]' "$(jrun 'cca list --json' | jq -c .chromeProfiles)"
+eq "chrome: unreadable Local State still opens" "OPEN -na $T/Chrome.app --args --profile-directory=Profile 3" "$(crun 'cca chrome personal')"
+rm -f $A/chrome-profiles-seen
+eq "json: unreadable and nothing kept: no profiles" '[]' "$(jrun 'cca list --json' | jq -c .chromeProfiles)"
+eq "chrome: unreadable and nothing kept: a linked profile still opens" "OPEN -na $T/Chrome.app --args --profile-directory=Profile 3" "$(crun 'cca chrome personal')"
+out=$(crun 'cca chrome other Work'); rc=$?
+no "chrome: unreadable: linking fails" $rc
+has "chrome: unreadable: says to run it in Terminal" "run cca chrome once in Terminal" "$out"
+crun 'cca chrome personal --unlink' >/dev/null; yes "chrome: unreadable: unlinking works" $?
+eq "chrome: unreadable: only that link is dropped" "other"$'\t'"Profile 3" "$(<$A/chrome-profiles)"
+chmod 644 "$CD/Local State"
+print -r -- '{"profile":{"info_cache":{"Default":{"name":"Person 1"}}}}' > "$CD/Local State"
+crun 'cca chrome' >/dev/null
+eq "chrome: a new read replaces the kept profiles" "Default"$'\t'"Person 1" "$(<$A/chrome-profiles-seen 2>&1)"
 unset CD CSTUBS
 
 print -r -- "$pass passed, $fail failed"

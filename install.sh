@@ -13,6 +13,8 @@ mkdir -p "$home_dir" "$home_dir/profiles"
 chmod 700 "$home_dir" "$home_dir/profiles"
 cp "$src" "$home_dir/cca.zsh"
 echo "Installed $home_dir/cca.zsh"
+# macOS does not let the desktop app read Chrome's profiles; keep them from here.
+CCA_HOME="$home_dir" zsh -f -c 'source "$1" && _cca_chrome_profiles >/dev/null' _ "$home_dir/cca.zsh" 2>/dev/null || true
 
 rc="$HOME/.zshrc"
 [ -f "$rc" ] || : > "$rc"
