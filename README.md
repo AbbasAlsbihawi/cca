@@ -172,6 +172,8 @@ cca chrome supercell        # open Chrome in that profile
 
 Sign in to the extension once in each profile, with the account linked to it. After that, `cca chrome <name>` opens Chrome with the extension already on that account. `cca chrome <name> --unlink` drops the link, and removing an account drops it too. The links are in `~/.claude-accounts/chrome-profiles` and are saved with each backup. cca only reads Chrome's list of profiles; it changes nothing in Chrome or the extension.
 
+macOS lets Terminal read that list but not the desktop app. So each time cca reads it (`install.sh`, `cca chrome`), it keeps a copy in `~/.claude-accounts/chrome-profiles-seen`, and the desktop app uses that copy. After you add a Chrome profile, run `cca chrome` once in Terminal so the app sees it.
+
 ## Desktop app
 
 "Claude Accounts" is one app for macOS and Windows that does the same things with buttons. Install it from [GitHub Releases](https://github.com/AbbasAlsbihawi/cca/releases): the `.dmg` on macOS, `ClaudeAccounts-Setup-<version>.exe` on Windows. It updates itself. Neither build is signed with a paid developer certificate, so the first launch is blocked: on macOS open System Settings → Privacy & Security and choose *Open Anyway*; on Windows choose *More info* → *Run anyway*.
@@ -218,6 +220,7 @@ These stay separate for each account:
 - `~/.claude-accounts/default-name`: the name of the default account
 - `~/.claude-accounts/bindings`: folder bindings
 - `~/.claude-accounts/chrome-profiles`: the Chrome profile linked to each account
+- `~/.claude-accounts/chrome-profiles-seen`: Chrome's profiles as cca last read them, for the desktop app
 - `~/.claude-accounts/profiles/<name>/`: config folder of each account
 - `~/.claude-accounts/desktop/<name>/`: data folder of each desktop copy
 - `~/.claude-accounts/backups/`: backup snapshots

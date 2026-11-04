@@ -298,11 +298,26 @@ _cca_open() {
 # opens Chrome in that profile.
 
 # Prints "folder<TAB>name" for each Chrome profile, from Chrome's Local State.
+# macOS lets Terminal read that file but not the desktop app, so each read is
+# kept in $CCA_HOME/chrome-profiles-seen and used where the file cannot be read.
 _cca_chrome_profiles() {
-  local st="$CCA_CHROME_DATA/Local State"
+  emulate -L zsh
+  local st="$CCA_CHROME_DATA/Local State" seen=$CCA_HOME/chrome-profiles-seen out
+  if [[ -e $st && ! -r $st ]]; then
+    [[ -r $seen ]] && print -r -- "$(<$seen)"
+    return 0
+  fi
   [[ -r $st ]] && (( $+commands[jq] )) || return 0
-  jq -r '.profile.info_cache // {} | to_entries | sort_by(.key)[] | "\(.key)\t\(.value.name // .key)"' $st 2>/dev/null
+  out=$(jq -r '.profile.info_cache // {} | to_entries | sort_by(.key)[] | "\(.key)\t\(.value.name // .key)"' $st 2>/dev/null) || return 0
+  if [[ -d $CCA_HOME ]] && [[ ! -r $seen || $out != "$(<$seen)" ]]; then
+    print -r -- $out > $seen.$$ && mv -f $seen.$$ $seen
+  fi
+  [[ -n $out ]] && print -r -- $out
+  return 0
 }
+
+# True when Chrome's Local State is there but cannot be read (the desktop app).
+_cca_chrome_unreadable() { [[ -e "$CCA_CHROME_DATA/Local State" && ! -r "$CCA_CHROME_DATA/Local State" ]] }
 
 # Prints the Chrome profile folder linked to an account.
 _cca_chrome_linked() {
@@ -333,8 +348,11 @@ _cca_chrome() {
   local name=$1 want=$2 line dir pname n
   local -a profs found accts
   profs=(${(f)"$(_cca_chrome_profiles)"})
-  if (( ! $#profs )); then
-    if (( ! $+commands[jq] )); then _cca_err "cca chrome needs jq (brew install jq)"
+  # Listing and linking need the profiles. Opening a linked profile and unlinking
+  # do not, so they still work where Chrome's folder cannot be read.
+  if (( ! $#profs )) && { [[ -z $name || ( -n $want && $want != --unlink ) ]] || ! _cca_chrome_unreadable }; then
+    if _cca_chrome_unreadable; then _cca_err "cannot read Chrome's profiles from here; run cca chrome once in Terminal"
+    elif (( ! $+commands[jq] )); then _cca_err "cca chrome needs jq (brew install jq)"
     else _cca_err "no Chrome profiles found in $CCA_CHROME_DATA. Open Google Chrome once first."
     fi
     return 1
@@ -377,10 +395,11 @@ _cca_chrome() {
     _cca_err "'$name' has no Chrome profile yet. Link one: cca chrome $name <profile>  (see: cca chrome)"
     return 1
   fi
-  # A folder Chrome no longer knows would open as a new, empty profile.
+  # A folder Chrome no longer knows would open as a new, empty profile. Without
+  # the profiles (Chrome's folder unreadable, nothing kept) the link is trusted.
   found=()
   for line in $profs; do [[ ${line%%$'\t'*} == "$dir" ]] && found=($line); done
-  if (( ! $#found )); then
+  if (( $#profs && ! $#found )); then
     _cca_err "the Chrome profile '$dir' linked to '$name' is gone. Link another: cca chrome $name <profile>"
     return 1
   fi
