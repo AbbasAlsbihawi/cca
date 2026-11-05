@@ -166,7 +166,7 @@ _cca_login() {
   shift
   local dir=$(_cca_dir $name)
   [[ -n $dir ]] && _cca_seed_config $dir
-  _cca_backup --quiet >/dev/null 2>&1 || :
+  _cca_autobackup_on && { _cca_backup --quiet >/dev/null 2>&1 || : }
   print -r -- "Signing in '$name'. If the browser is signed in to another Claude account, switch it there first."
   _cca_exec $name claude auth login "$@"
 }
@@ -588,7 +588,7 @@ _cca_remove() {
     _cca_err "the Claude app for '$name' is open (PID $pid). Quit it first (Cmd+Q)."
     return 1
   fi
-  _cca_backup --quiet >/dev/null 2>&1 || :
+  _cca_autobackup_on && { _cca_backup --quiet >/dev/null 2>&1 || : }
   dir=$(_cca_dir $name)
   data=$(_cca_app_data $name)
   _cca_exec $name claude auth logout >/dev/null 2>&1
@@ -687,6 +687,12 @@ _cca_fill() {
     esac
   done
   return 0
+}
+
+# True when the daily autobackup is on. `cca login` and `cca remove` back up
+# first only then, so `cca autobackup off` stops every automatic snapshot.
+_cca_autobackup_on() {
+  [[ -f $CCA_LAUNCH_AGENTS/dev.cca.backup.plist ]]
 }
 
 # Snapshots every account's transcripts and desktop session lists, plus bindings
