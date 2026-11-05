@@ -476,14 +476,21 @@ eq "update: restarts every open copy" $'QUIT 11\nOPEN personal\nOpened \'persona
 eq "update: a copy that does not quit is not reopened" "cca: 'personal' did not quit, so it still runs the old version" \
   "$(run "$UP"$'\n''_cca_quit_pid() { return 1 }; cca update')"
 
-# 20. remove and login back up first
-rm -rf $BK
+# 20. remove and login back up first, only while autobackup is on
+rm -rf $LA $BK
+prof extra
+out=$(run "$CTX"$'\n''cca login extra')
+eq "login with autobackup off takes no backup" 0 "$(ls $BK 2>/dev/null | grep -cE '^[0-9]{4}-')"
+prof gone
+out=$(run "$CTX"$'\n''cca remove gone')
+eq "remove with autobackup off takes no backup" 0 "$(ls $BK 2>/dev/null | grep -cE '^[0-9]{4}-')"
+run "$CTX"$'\n''cca autobackup on' >/dev/null
 out=$(run "$CTX"$'\n''cca remove personal')
 eq "remove triggers a backup" 1 "$(ls $BK | grep -cE '^[0-9]{4}-')"
 rm -rf $BK
-prof extra
 out=$(run "$CTX"$'\n''cca login extra')
 eq "login triggers a backup" 1 "$(ls $BK | grep -cE '^[0-9]{4}-')"
+run "$CTX"$'\n''cca autobackup off' >/dev/null
 
 # 21. cca list --json
 mk_home; prof personal; prof other

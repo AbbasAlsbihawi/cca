@@ -227,7 +227,7 @@ function Invoke-CcaLogin($a) {
     if ($dir) { Initialize-CcaConfig $dir }
     # The safety backup must not fail the login; cca.zsh throws its status away too.
     $failed = $script:CCA_FAILED
-    try { Invoke-CcaBackup @('--quiet') | Out-Null } catch {}
+    if (Test-CcaAutobackup) { try { Invoke-CcaBackup @('--quiet') | Out-Null } catch {} }
     $script:CCA_FAILED = $failed
     Write-Host "Signing in '$name'. If the browser is signed in to another Claude account, switch it there first."
     Invoke-CcaClaude $name (@('auth', 'login') + @($a | Select-Object -Skip 1))
@@ -695,7 +695,7 @@ function Invoke-CcaRemove($a) {
     # Neither the safety backup nor a logout that fails (already logged out) fails
     # the removal; cca.zsh throws both statuses away as well.
     $failed = $script:CCA_FAILED
-    try { Invoke-CcaBackup @('--quiet') | Out-Null } catch {}
+    if (Test-CcaAutobackup) { try { Invoke-CcaBackup @('--quiet') | Out-Null } catch {} }
     $dir = Get-CcaDir $name
     $data = Get-CcaAppData $name
     try { Invoke-CcaClaude $name @('auth', 'logout') *> $null } catch {}
@@ -764,6 +764,12 @@ function Copy-CcaMissing([string]$from, [string]$to, [string]$kind, $c) {
         if ($kind -eq 'sess' -and $f.Name -like 'local_*.json') { $c.sess++ }
         if ($kind -eq 'tr' -and $rel -match '^[^\\]+\\[^\\]+\.jsonl$') { $c.tr++ }
     }
+}
+
+# True when the daily autobackup task exists. Login and remove back up first
+# only then, so 'cca autobackup off' stops every automatic snapshot.
+function Test-CcaAutobackup {
+    try { return [bool](Get-ScheduledTask -TaskName 'cca-backup' -ErrorAction SilentlyContinue) } catch { return $false }
 }
 
 function Invoke-CcaBackup($a) {

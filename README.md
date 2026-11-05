@@ -247,7 +247,7 @@ cca restore personal --dry-run           # shows what would be copied; changes n
 cca autobackup on          # every day at 13:00 (off to stop, status to check)
 ```
 
-`cca remove` and `cca login` take a backup first.
+While autobackup is on, `cca remove` and `cca login` take a backup first. With autobackup off, cca takes no backup unless you run `cca backup`.
 
 Logging out inside a desktop copy hides its conversations from the Code tab. They are not deleted. `cca restore <name>` brings them back: it copies what is missing from the newest snapshot and, for a desktop copy, from the main Claude app, then moves the "deleted" marks of those sessions to the Trash. Quit that account's Claude app first. Restore never overwrites a file. It also copies the Code tab sessions an account used in the main app before it had its own copy, with the transcripts they point to. The account is found from its terminal login (`cca login`) or from the one account its copy has signed in with; otherwise pass `--account <uuid>`. Add `--dry-run` (`-n`) to see what would be copied and which marks would move, without changing anything. Chats in the Chat tab live on Anthropic's servers and show up by themselves once the copy is signed in to that account.
 
