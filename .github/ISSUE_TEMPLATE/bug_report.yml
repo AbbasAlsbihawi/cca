@@ -1,0 +1,112 @@
+name: Bug report
+description: Something in CCA does not work as documented.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Please check the [troubleshooting guide](https://github.com/AbbasAlsbihawi/cca/blob/main/docs/troubleshooting.md) and existing issues first.
+
+        **Do not share credentials, tokens, cookies, keychain items, the contents of `.claude.json`, conversation transcripts or real account emails.** Replace them with placeholders such as `you@example.com`.
+
+        For a security problem, do not use this form; see the [security policy](https://github.com/AbbasAlsbihawi/cca/security/policy).
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A short description of the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The exact commands you ran or buttons you clicked.
+      placeholder: |
+        1. cca add personal
+        2. cd ~/projects/demo && cca bind personal
+        3. claude
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: What happened instead, including any error message.
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Windows
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: os_version
+    attributes:
+      label: Operating system version
+      placeholder: "macOS 15.5 (Apple silicon), Windows 11 24H2, ..."
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Which part of CCA?
+      multiple: true
+      options:
+        - CLI (cca command)
+        - Claude app copy per account (cca app, cca open)
+        - Claude Accounts desktop app
+        - Backup and restore
+        - Claude in Chrome (cca chrome)
+        - Installer or uninstaller
+        - Documentation
+    validations:
+      required: true
+  - type: input
+    id: cca_version
+    attributes:
+      label: CCA version
+      description: The release tag you installed, or the commit of your clone (`git rev-parse --short HEAD`). For the desktop app, the version on its General page.
+      placeholder: "v0.1.12, or a1b2c3d"
+    validations:
+      required: true
+  - type: input
+    id: claude_version
+    attributes:
+      label: Claude Code and Claude desktop app versions
+      description: "`claude --version`, and the desktop app's version if the problem involves it."
+  - type: dropdown
+    id: install_method
+    attributes:
+      label: How did you install CCA?
+      multiple: true
+      options:
+        - install.sh (macOS)
+        - install.ps1 (Windows)
+        - Claude Accounts desktop app installer
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output or logs
+      description: Output of the failing command, `cca`, or the desktop app's Show Activity. Remove emails, tokens and other personal data first.
+      render: text
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Anything else that might help, such as how many accounts you have or whether jq is installed (macOS).
