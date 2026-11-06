@@ -20,8 +20,8 @@ On macOS, open terminals load the new version on their next `cca` command. If yo
 
 ## Accounts
 
-**`cca list` shows "not logged in" for every account (macOS)**
-CCA reads emails with jq. Install it with `brew install jq`.
+**`cca list` shows "login unknown (install jq)" (macOS)**
+Without jq, CCA reads emails with a simpler pattern, and this account's file did not fit it. Install jq with `brew install jq`.
 
 **The terminal uses the wrong account**
 Run `cca` to see the reason: `set in this terminal` (undo with `cca use -`), `folder …` (a binding; see `cca unbind`), or `default`. If the account is right but its login is wrong, run `cca login <name>`.
@@ -91,4 +91,4 @@ A banner shows the error. Use *Show Activity* to see every command the app ran, 
 ## Uninstalling
 
 **Errors keep appearing in `~/.claude-accounts/autoupdate.log` after uninstalling (macOS)**
-`uninstall.sh` does not remove the autoupdate job. Reinstall with `./install.sh`, run `cca autoupdate off`, then uninstall again.
+`uninstall.sh` from CCA 0.1.12 or older left the autoupdate job behind. Reinstall with `./install.sh`, run `cca autoupdate off`, then uninstall again.

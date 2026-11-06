@@ -153,11 +153,9 @@ The app runs the `cca` CLI for every action, so the terminal and the app always 
 - `cca app <name> [color]` makes a Start menu shortcut in `Programs\cca`. With a colour, the shortcut gets a tinted Claude icon, and the Claude Accounts app shows the colour as a dot next to the account. Windows may still show the plain Claude icon on a running window in the taskbar.
 - `cca open <name>` starts the Claude desktop app with its own `--user-data-dir`. CCA looks for the app in the usual install folders under `%LOCALAPPDATA%` and in installed app packages. If it is elsewhere, set `CCA_CLAUDE_EXE` to its `Claude.exe`.
 - `cca chrome`, `cca update` and `cca autoupdate` are not available on Windows.
-- In the Claude Accounts app on Windows, *New Terminal* is expected to open PowerShell on the chosen account, but `cca.ps1` does not read the variable that the app sets, so the new window may follow folder bindings instead. This is recorded as a known issue for a future release.
 
 ## Limitations
 
 - Depends on undocumented Claude desktop app behaviour; a Claude app update can break it.
 - First sign-in of each copy needs the other copies closed (the `claude://` link).
 - The desktop builds are unsigned, so the operating system warns on first launch.
-- On Windows, *New Terminal* in the Claude Accounts app may not open on the chosen account (see [Windows notes](#windows-notes)).

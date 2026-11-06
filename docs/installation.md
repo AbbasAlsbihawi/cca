@@ -14,7 +14,7 @@
 
 What jq does on macOS:
 
-- `cca list`, `cca` and the desktop app read account emails with jq. Without it, every account shows as "not logged in", even when it is signed in.
+- `cca list`, `cca` and the desktop app read account emails with jq. Without it, CCA reads them with a simpler pattern; a login it cannot read that way shows as "login unknown (install jq)".
 - New accounts get the default account's MCP servers and theme only when jq is installed.
 - `cca chrome` needs jq to read Chrome's profile list.
 - When `cca restore` copies sessions from the main Claude app, it reads them with jq, or with `python3` when jq is missing.
@@ -61,10 +61,7 @@ Running `install.sh` again replaces `~/.claude-accounts/cca.zsh` and leaves `~/.
 
 ### Uninstall
 
-First turn off the autoupdate job if you turned it on, because `uninstall.sh` does not remove it:
-
 ```sh
-cca autoupdate off
 ./uninstall.sh
 ```
 
@@ -72,7 +69,7 @@ cca autoupdate off
 
 - removes the CCA lines from `~/.zshrc` (after saving a backup)
 - deletes `~/.claude-accounts/cca.zsh`
-- removes the daily backup job (`~/Library/LaunchAgents/dev.cca.backup.plist`)
+- removes the daily backup and autoupdate jobs (`~/Library/LaunchAgents/dev.cca.backup.plist`, `dev.cca.update.plist`)
 - deletes the launchers that `cca app` made in `~/Applications`
 - deletes the Claude Accounts app from `/Applications` or `~/Applications`, but only if its bundle identifier is `dev.cca.accounts`
 

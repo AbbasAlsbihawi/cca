@@ -46,11 +46,10 @@ Real-install use on Windows: the Windows port itself ([#1](https://github.com/Ab
 | Removed accounts go to | the Trash | the Recycle Bin |
 | Backups | APFS clones | plain copies |
 | `cca restore` options | `[snapshot]`, `--dry-run`, `--account` | `[snapshot]` only |
-| `cca list` sign-in check | reads `.claude.json` (needs jq) | reads `.claude.json` and asks `claude auth status` |
+| `cca list` sign-in check | reads `.claude.json` (with jq, or a simpler pattern without it) | reads `.claude.json` and asks `claude auth status` |
 | Claude Accounts app and the CLI | needs `install.sh` first | carries its own `cca.ps1` |
 
 ## Known gaps
 
-- On Windows, the Claude Accounts app's *New Terminal* sets an environment variable that `cca.ps1` does not read, so the new window may not use the chosen account.
 - Linux is not supported: the script relies on macOS paths and tools.
 - The desktop features depend on undocumented Claude desktop app behaviour.

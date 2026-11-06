@@ -6,8 +6,16 @@ Each entry is taken from the Git tags, the GitHub release notes and the merged p
 
 ## [Unreleased]
 
+### Fixed
+
+- macOS: `uninstall.sh` also removes the autoupdate job; before, it kept running every minute after an uninstall.
+- Windows: the desktop app's *New Terminal* opens PowerShell on the chosen account. `cca.ps1` now takes `CCA_ACCOUNT` from the environment unless `cca use` picked another account.
+- macOS: without jq, `cca list` and `cca list --json` read account emails with a simpler pattern, and show a login they cannot read as unknown instead of "not logged in".
+- `cca help` calls the desktop app "the desktop app", not "the Mac app".
+
 ### Changed
 
+- Tests: both suites start from a clean environment, keep every file inside the temporary folder, and stub LaunchServices, the process list, `open` and `launchctl`; `uninstall.sh` is now tested in a throwaway folder.
 - The project is presented as CCA, a multi-account manager for Claude Code and the Claude desktop app. The repository, the `cca` command and the desktop app's current name are unchanged.
 
 ### Added

@@ -24,7 +24,7 @@ How to contribute, coding guidelines and pull request rules: [CONTRIBUTING.md](.
 zsh tests/run.sh
 ```
 
-The zsh suite runs every test in a throwaway home folder with a stub `claude`, and drops any `CCA_*` variables it inherits, so it never touches your real accounts. It stops before running anything if a path would still point outside the throwaway folder.
+The zsh suite restarts itself in a clean environment (only `PATH`, `TMPDIR` and the locale come through), runs every test in a throwaway folder inside `TMPDIR` with a stub `claude`, and puts safety stubs for `ps`, `open` and `launchctl` first on the `PATH`, so it never touches your real accounts, processes or launchd jobs. It stops before running anything if a path would still point outside the throwaway folder. The PowerShell suite drops every inherited `CCA_*` variable and `CLAUDE_CONFIG_DIR` before its first test.
 
 On Windows:
 

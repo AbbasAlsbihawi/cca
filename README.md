@@ -47,7 +47,7 @@ Shared versus separate: settings, `CLAUDE.md`, skills and plugins are **shared**
 
 ### macOS
 
-Requirements: macOS with zsh (the default shell), [Claude Code](https://code.claude.com/docs/en/overview) (`claude`), and [jq](https://jqlang.org) (recommended: `brew install jq`). Without jq, CCA cannot show account emails, copy MCP servers into new accounts, or link Chrome profiles.
+Requirements: macOS with zsh (the default shell), [Claude Code](https://code.claude.com/docs/en/overview) (`claude`), and [jq](https://jqlang.org) (recommended: `brew install jq`). Without jq, CCA cannot copy MCP servers into new accounts or link Chrome profiles, and may show a login as unknown.
 
 ```sh
 git clone https://github.com/AbbasAlsbihawi/cca.git
@@ -233,7 +233,7 @@ Evidence behind each status and the full list of differences: [docs/platform-sup
 ## Troubleshooting
 
 - **`command not found: cca`**: open a new terminal, or run `source ~/.zshrc`.
-- **`cca list` says "not logged in" for every account (macOS)**: install jq (`brew install jq`).
+- **`cca list` says "login unknown (install jq)" (macOS)**: install jq (`brew install jq`).
 - **The terminal uses the wrong account**: run `cca` to see why, then `cca login <name>` if the login itself is wrong.
 - **A desktop copy shows the wrong account**: quit every Claude copy, open only that one, log out, then log in.
 - **Signing in picks the wrong Google account**: type the email and use "Continue with email" instead of "Continue with Google".
