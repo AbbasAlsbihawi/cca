@@ -40,7 +40,7 @@ Audit before Phase 2: `.github/` held only `workflows/test.yml`. There was no co
 | `SECURITY.md` | Supported versions, private reporting (with a fallback while private reporting is off), what to include and what never to send, what is and is not a vulnerability, how to protect your own setup |
 | `bug_report.yml` | Required: description, steps, expected, actual, OS, OS version, part of CCA, CCA version, install method. Optional: Claude versions, logs, context. A warning against sharing secrets. Label `bug` |
 | `feature_request.yml` | Problem, solution, alternatives, platforms, context. Label `enhancement` |
-| `windows_test_report.yml` | Windows and PowerShell versions, CCA and Claude versions, Developer Mode, a checklist of 11 Windows features, results, failure steps, logs. No label (none suitable exists) |
+| `windows_test_report.yml` | Windows and PowerShell versions, CCA and Claude versions, Developer Mode, a checklist of 11 Windows features, results, failure steps, logs. Labels `windows`, `platform-test` |
 | `config.yml` | Blank issues allowed; a "Report a security problem" link to the security policy |
 | `PULL_REQUEST_TEMPLATE.md` | Summary, linked issue, type of change, testing (commands, platforms tested and not tested), a 7-item checklist including "matching change in the other CLI" and "docs and changelog updated" |
 
@@ -65,13 +65,15 @@ Sources: `git tag`, `gh release list`, the body of every GitHub release, `git lo
 
 ## 5. Security disclosure limitations
 
-- **Private vulnerability reporting is off** (checked with the GitHub API: `enabled: false`). `SECURITY.md` asks reporters to use it and falls back to a "Security contact request" issue with no details. Turning it on makes the first route work.
+- Private vulnerability reporting was off when Phase 2 started (GitHub API: `enabled: false`); the owner approved turning it on, and it is now on. `SECURITY.md` asks reporters to use it and keeps a fallback (a "Security contact request" issue with no details).
 - No security email exists, and none was invented.
 - No response time is promised.
 - The `config.yml` link `https://github.com/AbbasAlsbihawi/cca/security/policy` shows `SECURITY.md` only after it is merged into `main`.
 - `SECURITY.md` states clearly what is out of scope by design: CCA is not a security boundary; shared settings; copied MCP definitions; unencrypted backups; unsigned builds.
 
-## 6. GitHub settings to approve (nothing applied)
+## 6. GitHub settings
+
+> **Applied on 2026-11-06 with the owner's approval:** the description, the 12 topics, private vulnerability reporting (now on), the wiki (now off; it had no pages), and five labels: `windows`, `macos`, `desktop-app`, `cli`, `platform-test`. Discussions stay off. Verified with `gh repo view`, `gh api …/private-vulnerability-reporting` and `gh label list`.
 
 | Setting | Now | Recommendation |
 |---|---|---|
@@ -102,6 +104,8 @@ Options:
 | A. Keep | CCA — Claude Accounts | none | highest |
 | **B. Descriptive (recommended)** | **CCA — multi-account manager for Claude Code**, tagline unchanged | docs only now; the desktop app is renamed from "Claude Accounts" to "CCA" in Phase 3 | low: "Claude" only says what it works with |
 | C. New brand | a new name with no "Claude" in it | high: new name search, all docs, the app, the posts | lowest |
+
+> **Decision (2026-11-06):** the owner chose option B. The README now presents the project as "CCA" with the subtitle "A multi-account manager for Claude Code and the Claude desktop app" and the tagline "One workflow. Multiple accounts." The installed desktop app keeps the name "Claude Accounts" until Phase 3D, which will plan the rename and its migration.
 
 Recommendation: **B**. Keep the short name `CCA` and the `cca` command; they carry no "Claude" and nothing breaks. Do not spell out the acronym in the branding. Rename the desktop app to "CCA" in Phase 3 (it changes the installed app's name, so the updater and `uninstall.sh` must handle both names), and give it a colour of its own in Phase 4. This is not legal advice; for certainty, ask Anthropic (the guidelines name `marketing@anthropic.com` for trademark questions).
 

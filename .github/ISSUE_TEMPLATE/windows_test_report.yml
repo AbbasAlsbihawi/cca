@@ -1,6 +1,7 @@
 name: Windows test report
 description: Share what worked and what did not when you tried CCA on Windows.
 title: "[Windows test]: "
+labels: ["windows", "platform-test"]
 body:
   - type: markdown
     attributes:

@@ -6,6 +6,10 @@ Each entry is taken from the Git tags, the GitHub release notes and the merged p
 
 ## [Unreleased]
 
+### Changed
+
+- The project is presented as CCA, a multi-account manager for Claude Code and the Claude desktop app. The repository, the `cca` command and the desktop app's current name are unchanged.
+
 ### Added
 
 - Documentation for the public launch: a new README, guides under `docs/`, a contribution guide (`CONTRIBUTING.md`), a security policy (`SECURITY.md`), issue forms, a pull request template and this changelog.

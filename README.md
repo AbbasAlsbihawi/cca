@@ -1,8 +1,8 @@
-# CCA — Claude Accounts
+# CCA
 
-**One workflow. Multiple Claude accounts.**
+**One workflow. Multiple accounts.**
 
-Manage multiple Claude accounts across the Claude Code CLI, the Claude desktop app, and your projects, without constant sign-outs.
+A multi-account manager for Claude Code and the Claude desktop app. Keep your personal, work and client Claude accounts signed in side by side, and let each project use the right one, without constant sign-outs.
 
 [![Latest release](https://img.shields.io/github/v/release/AbbasAlsbihawi/cca)](https://github.com/AbbasAlsbihawi/cca/releases/latest)
 [![Tests](https://github.com/AbbasAlsbihawi/cca/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/AbbasAlsbihawi/cca/actions/workflows/test.yml)
