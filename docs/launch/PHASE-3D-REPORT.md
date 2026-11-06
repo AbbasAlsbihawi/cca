@@ -35,7 +35,9 @@ The v0.1.12 updater's own rules are under test and pick the new `CCA-*` files. A
 
 ## Electron userData
 
-`main.js` sets `userData` to `<appData>/Claude Accounts` before anything uses it, including the single-instance lock. An upgrade keeps what Electron stored there, and an old and a new copy cannot run at the same time.
+`main.js` sets `userData` to `<appData>/claude-accounts` before anything uses it, including the single-instance lock. An upgrade keeps what Electron stored there, and an old and a new copy cannot run at the same time.
+
+**Gate B.1 correction.** Gate B first pinned `<appData>/Claude Accounts`. The Gate C upgrade test (M2) showed that v0.1.12 uses `<appData>/claude-accounts`: Electron names the folder after package.json `name`, because `productName` is set only for electron-builder. With the wrong pin, 0.2.0 started a new folder and ran next to a 0.1.12 copy. Gate B.1 pins `claude-accounts`, and `desktop/test/userdata-path.test.js` checks the folder name and that the pin comes before the lock. The folder holds only Electron's caches, state and lock; CCA's own data in `~/.claude-accounts` was never affected.
 
 ## Installer, uninstaller, release tools
 
@@ -56,6 +58,7 @@ The v0.1.12 updater's own rules are under test and pick the new `CCA-*` files. A
 | `desktop/scripts/publish.sh`, `desktop/scripts/update-zip.sh` | `CCA-*` names, `CCA.app`, `NO_UPDATE_ZIP` |
 | `uninstall.sh`, `install.ps1` | both app names / new installer name |
 | `desktop/test/updater-assets.test.js` | new unit tests |
+| `desktop/test/userdata-path.test.js` | new (Gate B.1): userData folder name and order |
 | `tests/run.sh` | uninstall of both names, foreign `CCA.app` kept |
 | `.github/workflows/test.yml` | runs the unit tests |
 | `README.md`, `docs/*.md`, issue forms, `CHANGELOG.md` | "CCA desktop app", `CCA-…` files, a note on names before 0.2.0 |
@@ -64,6 +67,7 @@ The v0.1.12 updater's own rules are under test and pick the new `CCA-*` files. A
 
 - **`desktop/test/updater-assets.test.js`** (5 tests): the v0.1.12 rules, copied verbatim from the `v0.1.12` tag, pick the CCA full zip for each architecture and never a CCA update-only zip. The current rules pick the CCA full and update-only zips and still read old-name releases. dmg, exe, blockmap and yml files are never picked, and other architectures get nothing.
 - **`tests/run.sh`:** uninstall removes `CCA.app` and `Claude Accounts.app`, and keeps a foreign `CCA.app`.
+- **`desktop/test/userdata-path.test.js`** (Gate B.1, 3 tests): `main.js` pins `<appData>/claude-accounts`, the folder equals package.json `name` and there is no top-level `productName`, and the pin comes before the single-instance lock and before anything reads `userData`. It fails against the Gate B pin.
 
 ## Local validation
 
