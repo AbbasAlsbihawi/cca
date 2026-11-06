@@ -735,6 +735,13 @@ else
 <plist version="1.0"><dict><key>CFBundleIdentifier</key><string>com.example.other</string></dict></plist>' > "$U/Applications/Claude Accounts.app/Contents/Info.plist"
   uninst
   [[ -e "$U/Applications/Claude Accounts.app" ]] && ok "uninstall: another app with the same name is kept" || bad "uninstall: another app with the same name is kept" kept removed
+  mk_uninst; mkdir -p "$U/Applications/CCA.app/Contents" "$U/home/Applications/CCA.app/Contents"
+  cp "$U/Applications/Claude Accounts.app/Contents/Info.plist" "$U/Applications/CCA.app/Contents/Info.plist"
+  print -r -- '<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict><key>CFBundleIdentifier</key><string>com.example.cca</string></dict></plist>' > "$U/home/Applications/CCA.app/Contents/Info.plist"
+  uninst; yes "uninstall: both app names: exits 0" $?
+  [[ ! -e "$U/Applications/CCA.app" && ! -e "$U/Applications/Claude Accounts.app" ]] && ok "uninstall: removes CCA.app and Claude Accounts.app" || bad "uninstall: removes CCA.app and Claude Accounts.app" "both gone" "$(ls $U/Applications)"
+  [[ -e "$U/home/Applications/CCA.app" ]] && ok "uninstall: a foreign CCA.app is kept" || bad "uninstall: a foreign CCA.app is kept" kept removed
   mk_uninst; jobs_on backup
   uninst CCA_TEST_APPLICATIONS=/; no "uninstall: test folder / refused" $?
   has "uninstall: refusal says why" "must be a folder inside" "$(<$U/out)"

@@ -20,7 +20,7 @@ case $ARCH in
 esac
 [ -n "$V" ] || { echo "ERROR: no version given" >&2; exit 1; }
 
-FULL="release/ClaudeAccounts-$V-$ARCH-mac.zip"
+FULL="release/CCA-$V-$ARCH-mac.zip"
 [ -f "$FULL" ] || { echo "ERROR: $FULL is missing" >&2; exit 1; }
 
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/cca-update-zip.XXXXXX")
@@ -29,8 +29,8 @@ trap 'rm -rf "$TMP"' EXIT
 # Start from the zip that gets published, not from release/mac*, so the two
 # downloads can never hold different builds.
 ditto -x -k "$FULL" "$TMP/full"
-APP="$TMP/full/Claude Accounts.app"
-[ -d "$APP" ] || { echo "ERROR: $FULL holds no 'Claude Accounts.app'" >&2; exit 1; }
+APP="$TMP/full/CCA.app"
+[ -d "$APP" ] || { echo "ERROR: $FULL holds no 'CCA.app'" >&2; exit 1; }
 if ! codesign --verify --deep --strict "$APP" 2>/dev/null; then
   echo "ERROR: the bundle inside $FULL fails codesign --verify --deep --strict" >&2
   exit 1
@@ -51,16 +51,16 @@ esac
 mkdir "$TMP/frameworks"
 mv "$FW/"*.framework "$TMP/frameworks/"
 
-NAME="ClaudeAccounts-$V-$ARCH-update-electron-$EV.zip"
-rm -f "release/ClaudeAccounts-$V-$ARCH-update-electron-"*.zip
+NAME="CCA-$V-$ARCH-update-electron-$EV.zip"
+rm -f "release/CCA-$V-$ARCH-update-electron-"*.zip
 # --norsrc: no extended attributes or resource forks, like the full zip.
 ditto -c -k --norsrc --keepParent "$APP" "release/$NAME"
 
 # Round trip: unpack the new zip, put the same frameworks back, as the updater
 # does, and require the result to pass the same signature check.
 ditto -x -k "release/$NAME" "$TMP/check"
-mv "$TMP/frameworks/"*.framework "$TMP/check/Claude Accounts.app/Contents/Frameworks/"
-if ! codesign --verify --deep --strict "$TMP/check/Claude Accounts.app" 2>/dev/null; then
+mv "$TMP/frameworks/"*.framework "$TMP/check/CCA.app/Contents/Frameworks/"
+if ! codesign --verify --deep --strict "$TMP/check/CCA.app" 2>/dev/null; then
   rm -f "release/$NAME"
   echo "ERROR: $NAME plus the frameworks of $FULL fails codesign --verify" >&2
   exit 1

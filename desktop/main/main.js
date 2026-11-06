@@ -7,6 +7,11 @@ const { buildAppMenu } = require('./menu');
 const { createTray } = require('./tray');
 const { startAutoUpdate } = require('./updater');
 
+// The app was called "Claude Accounts" before 0.2.0, and Electron names its data
+// folder after the app. Keep that folder, before anything uses it: an upgrade keeps
+// what Electron stored there, and an old and a new copy share one instance lock.
+app.setPath('userData', path.join(app.getPath('appData'), 'Claude Accounts'));
+
 let win = null;
 let quitting = false;
 

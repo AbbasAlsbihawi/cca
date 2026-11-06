@@ -49,9 +49,10 @@ for app in "$HOME"/Applications/*.app; do
   fi
 done
 
-# The desktop app, only if it is ours. /Applications is where the dmg puts it;
+# The desktop app, only if it is ours: "CCA.app" from 0.2.0, "Claude Accounts.app"
+# before (an upgraded copy keeps that folder name). /Applications is where the dmg puts it;
 # ~/Applications is where the retired Swift app installed itself.
-for app in "$apps_dir/Claude Accounts.app" "$HOME/Applications/Claude Accounts.app"; do
+for app in "$apps_dir/CCA.app" "$apps_dir/Claude Accounts.app" "$HOME/Applications/CCA.app" "$HOME/Applications/Claude Accounts.app"; do
   if [ -d "$app" ] && [ "$(defaults read "$app/Contents/Info" CFBundleIdentifier 2>/dev/null)" = "dev.cca.accounts" ]; then
     rm -rf "$app"
     echo "Removed $app"

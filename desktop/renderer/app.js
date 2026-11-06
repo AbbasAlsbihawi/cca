@@ -45,7 +45,7 @@ function render() {
     $('page-title').textContent = 'General';
     renderGeneral($('detail'), { data: state.data, info: state.info, refresh, checkUpdates });
   } else {
-    $('page-title').textContent = a ? a.name : 'Claude Accounts';
+    $('page-title').textContent = a ? a.name : 'CCA';
     renderDetail($('detail'), a, {
       colors: colors(), snapshots: state.data && state.data.snapshots, chromeProfiles: state.data && state.data.chromeProfiles,
       refresh, openRestore, openAdd, removeAccount,
@@ -138,7 +138,7 @@ function updateText(s) {
     case 'ready': return 'Update' + v + ' ready - restart to install';
     case 'error': return s.message || 'Could not check for updates';
     case 'checking': return 'Checking for updates...';
-    default: return s.message || 'Claude Accounts is up to date.';
+    default: return s.message || 'CCA is up to date.';
   }
 }
 

@@ -42,12 +42,12 @@ if [ -n "$(git ls-remote --tags origin "refs/tags/v$V")" ]; then
 fi
 
 echo "==> [3/7] Verifying release assets in $DESKTOP_DIR/release"
-ASSETS="ClaudeAccounts-$V-arm64-mac.dmg
-ClaudeAccounts-$V-x64-mac.dmg
-ClaudeAccounts-$V-arm64-mac.zip
-ClaudeAccounts-$V-x64-mac.zip
-ClaudeAccounts-Setup-$V.exe
-ClaudeAccounts-Setup-$V.exe.blockmap
+ASSETS="CCA-$V-arm64-mac.dmg
+CCA-$V-x64-mac.dmg
+CCA-$V-arm64-mac.zip
+CCA-$V-x64-mac.zip
+CCA-Setup-$V.exe
+CCA-Setup-$V.exe.blockmap
 latest.yml"
 MISSING=0
 for f in $ASSETS; do
@@ -69,7 +69,7 @@ echo "==> [4/7] Verifying the macOS code signature"
 # instead of opening it, which is how 0.1.0 to 0.1.2 shipped. Ad-hoc is what
 # build.mac.identity "-" asks for; any other signature means the build picked up a
 # certificate from this machine's keychain by accident, which must not be published.
-for app in "release/mac-arm64/Claude Accounts.app" "release/mac/Claude Accounts.app"; do
+for app in "release/mac-arm64/CCA.app" "release/mac/CCA.app"; do
   if [ ! -d "$app" ]; then
     echo "ERROR: built app is missing: $app" >&2
     exit 1
@@ -92,12 +92,18 @@ echo "==> [5/7] Building the macOS update-only zips"
 # The updater takes it when the installed app runs the same Electron, and falls
 # back to the full zip otherwise. Each one is cut from its full zip, so the two
 # downloads always hold the same build.
+# NO_UPDATE_ZIP=1 publishes the full zips only, so every Mac downloads the whole
+# app; use it for a release that renames the app (0.2.0).
 UPDATE_ZIPS=
-for arch in arm64 x64; do
-  z=$(sh scripts/update-zip.sh "$V" "$arch") || { echo "ERROR: could not build the $arch update-only zip" >&2; exit 1; }
-  echo "    ok       $z"
-  UPDATE_ZIPS="$UPDATE_ZIPS $z"
-done
+if [ -n "${NO_UPDATE_ZIP:-}" ]; then
+  echo "    skipped  NO_UPDATE_ZIP is set: full zips only"
+else
+  for arch in arm64 x64; do
+    z=$(sh scripts/update-zip.sh "$V" "$arch") || { echo "ERROR: could not build the $arch update-only zip" >&2; exit 1; }
+    echo "    ok       $z"
+    UPDATE_ZIPS="$UPDATE_ZIPS $z"
+  done
+fi
 
 echo "==> [6/7] Tagging and pushing"
 git tag "v$V"
@@ -114,7 +120,7 @@ set --
 for f in $ASSETS $UPDATE_ZIPS; do
   set -- "$@" "release/$f"
 done
-gh release create "v$V" --title "Claude Accounts v$V" --generate-notes "$@"
+gh release create "v$V" --title "CCA v$V" --generate-notes "$@"
 
 echo "==> Done"
 gh release view "v$V" --json url --jq .url

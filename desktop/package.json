@@ -31,7 +31,7 @@
   },
   "build": {
     "appId": "dev.cca.accounts",
-    "productName": "Claude Accounts",
+    "productName": "CCA",
     "directories": {
       "output": "release",
       "buildResources": "build"
@@ -55,7 +55,7 @@
       ],
       "identity": "-",
       "hardenedRuntime": false,
-      "artifactName": "ClaudeAccounts-${version}-${arch}-mac.${ext}",
+      "artifactName": "CCA-${version}-${arch}-mac.${ext}",
       "target": [
         {
           "target": "dmg",
@@ -82,6 +82,7 @@
           ]
         }
       ],
+      "executableName": "Claude Accounts",
       "signAndEditExecutable": false,
       "extraResources": [
         {
@@ -93,7 +94,7 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "artifactName": "ClaudeAccounts-Setup-${version}.exe"
+      "artifactName": "CCA-Setup-${version}.exe"
     },
     "publish": {
       "provider": "github",
