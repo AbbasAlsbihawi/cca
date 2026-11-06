@@ -5,7 +5,7 @@
 CCA works with the Claude desktop app in two separate ways:
 
 1. **[A Claude app copy per account](#claude-app-copy-per-account).** The CLI starts the official Claude desktop app once per account, each with its own data folder, so every account stays signed in to the app at the same time.
-2. **[The Claude Accounts app](#the-claude-accounts-app).** CCA's own desktop app, which runs the CLI for you with buttons.
+2. **[The CCA desktop app](#the-cca-desktop-app).** CCA's own desktop app, which runs the CLI for you with buttons.
 
 > The desktop features rely on undocumented behaviour of the Claude desktop app (its `--user-data-dir` option and its use of `CLAUDE_CONFIG_DIR`). They may break after a Claude app update.
 
@@ -44,7 +44,7 @@ Connectors sign in the same way, and each account keeps its own connector sign-i
 cca run personal
 ```
 
-Then type `/mcp`, pick the server and sign in. The account's Claude app uses it from its next conversation. In the Claude Accounts app, **MCP servers → Sign In…** does the same: it opens a terminal with Claude on that account at its `/mcp` list.
+Then type `/mcp`, pick the server and sign in. The account's Claude app uses it from its next conversation. In the CCA desktop app, **MCP servers → Sign In…** does the same: it opens a terminal with Claude on that account at its `/mcp` list.
 
 ### What each copy keeps separate
 
@@ -88,9 +88,9 @@ Sign in to the extension once in each profile, with the account linked to it. Af
 - If the linked profile no longer exists, `cca chrome <name>` refuses instead of opening an empty new profile.
 - Needs jq and Google Chrome in `/Applications`.
 
-macOS lets Terminal read Chrome's profile list but not the desktop app. So each time CCA reads it (`install.sh`, `cca chrome`), it keeps a copy in `~/.claude-accounts/chrome-profiles-seen`, and the Claude Accounts app uses that copy. After you add a Chrome profile, run `cca chrome` once in Terminal so the app sees it.
+macOS lets Terminal read Chrome's profile list but not the desktop app. So each time CCA reads it (`install.sh`, `cca chrome`), it keeps a copy in `~/.claude-accounts/chrome-profiles-seen`, and the CCA desktop app uses that copy. After you add a Chrome profile, run `cca chrome` once in Terminal so the app sees it.
 
-## The Claude Accounts app
+## The CCA desktop app
 
 <!-- Phase 4: add a real screenshot here (assets/screenshots/desktop.png). -->
 
@@ -100,9 +100,11 @@ Download it from [GitHub Releases](https://github.com/AbbasAlsbihawi/cca/release
 
 | Platform | File |
 |---|---|
-| macOS, Apple silicon | `ClaudeAccounts-<version>-arm64-mac.dmg` |
-| macOS, Intel | `ClaudeAccounts-<version>-x64-mac.dmg` |
-| Windows, x64 | `ClaudeAccounts-Setup-<version>.exe` |
+| macOS, Apple silicon | `CCA-<version>-arm64-mac.dmg` |
+| macOS, Intel | `CCA-<version>-x64-mac.dmg` |
+| Windows, x64 | `CCA-Setup-<version>.exe` |
+
+Releases before 0.2.0 called the app "Claude Accounts" and named their files `ClaudeAccounts-…`. An older copy updates itself to CCA. On a Mac it keeps the folder name `Claude Accounts.app`, and on Windows the program file stays `Claude Accounts.exe` for now. Your accounts and settings in `~/.claude-accounts` are not affected.
 
 Neither build is signed with a paid developer certificate, so the first launch is blocked:
 
@@ -150,7 +152,7 @@ The app runs the `cca` CLI for every action, so the terminal and the app always 
 
 ## Windows notes
 
-- `cca app <name> [color]` makes a Start menu shortcut in `Programs\cca`. With a colour, the shortcut gets a tinted Claude icon, and the Claude Accounts app shows the colour as a dot next to the account. Windows may still show the plain Claude icon on a running window in the taskbar.
+- `cca app <name> [color]` makes a Start menu shortcut in `Programs\cca`. With a colour, the shortcut gets a tinted Claude icon, and the CCA desktop app shows the colour as a dot next to the account. Windows may still show the plain Claude icon on a running window in the taskbar.
 - `cca open <name>` starts the Claude desktop app with its own `--user-data-dir`. CCA looks for the app in the usual install folders under `%LOCALAPPDATA%` and in installed app packages. If it is elsewhere, set `CCA_CLAUDE_EXE` to its `Claude.exe`.
 - `cca chrome`, `cca update` and `cca autoupdate` are not available on Windows.
 

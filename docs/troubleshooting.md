@@ -60,7 +60,7 @@ Set `CCA_CLAUDE_EXE` to the full path of the Claude app's `Claude.exe`.
 **"cca chrome needs jq"**
 Install jq: `brew install jq`.
 
-**The Claude Accounts app does not list a new Chrome profile**
+**The CCA desktop app does not list a new Chrome profile**
 macOS does not let the app read Chrome's profile list. Run `cca chrome` once in Terminal; the app then uses the list CCA saved.
 
 **"the Chrome profile '…' linked to '…' is gone"**
@@ -79,7 +79,7 @@ Quit the copy before restoring, then open it again. A session whose transcript i
 
 ## Desktop app
 
-**macOS blocks the Claude Accounts app on first launch**
+**macOS blocks the CCA desktop app on first launch**
 Open System Settings → Privacy & Security and choose *Open Anyway*. The app is not signed with a paid developer certificate.
 
 **Windows SmartScreen blocks the installer**

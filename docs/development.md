@@ -15,7 +15,7 @@ How to contribute, coding guidelines and pull request rules: [CONTRIBUTING.md](.
 | `tests/run.sh` | zsh test suite |
 | `tests/run.ps1` | PowerShell test suite (Windows only) |
 | `tests/parse-ps1.ps1` | Parse check of every `.ps1` file |
-| `desktop/` | The Claude Accounts Electron app |
+| `desktop/` | The CCA desktop app (Electron) |
 | `.github/workflows/test.yml` | CI |
 
 ## Tests

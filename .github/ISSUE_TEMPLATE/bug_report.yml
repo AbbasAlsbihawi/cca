@@ -67,7 +67,7 @@ body:
       options:
         - CLI (cca command)
         - Claude app copy per account (cca app, cca open)
-        - Claude Accounts desktop app
+        - CCA desktop app
         - Backup and restore
         - Claude in Chrome (cca chrome)
         - Installer or uninstaller
@@ -95,7 +95,7 @@ body:
       options:
         - install.sh (macOS)
         - install.ps1 (Windows)
-        - Claude Accounts desktop app installer
+        - CCA desktop app installer
         - Other
     validations:
       required: true

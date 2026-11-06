@@ -8,7 +8,7 @@ CCA organizes several Claude accounts on one computer. This page explains what i
 
 - CCA has no server, no account system and no telemetry.
 - The CLI (`cca.zsh`, `cca.ps1`) makes no network requests of its own. Signing in, and everything Claude does, is handled by Claude Code and the Claude desktop app.
-- The Claude Accounts desktop app contacts GitHub (the releases of this repository) to check for and download its own updates.
+- The CCA desktop app contacts GitHub (the releases of this repository) to check for and download its own updates.
 - Opening Chrome with `cca chrome` only starts Chrome in a profile. CCA reads Chrome's list of profiles and changes nothing in Chrome or in the Claude in Chrome extension.
 
 ## What CCA reads and writes
@@ -54,7 +54,7 @@ If you need strong separation between clients, use separate operating system use
 
 ## Desktop app builds
 
-The Claude Accounts app is not signed with a paid developer certificate. macOS and Windows warn on first launch, and you have to allow it once. The source of every build is in this repository; you can read it, or build the app yourself (see [Development](development.md)). On Windows, the app runs its bundled PowerShell script with `-ExecutionPolicy Bypass` for that one script, so a restrictive execution policy does not block it.
+The CCA desktop app is not signed with a paid developer certificate. macOS and Windows warn on first launch, and you have to allow it once. The source of every build is in this repository; you can read it, or build the app yourself (see [Development](development.md)). On Windows, the app runs its bundled PowerShell script with `-ExecutionPolicy Bypass` for that one script, so a restrictive execution policy does not block it.
 
 ## Account policies
 

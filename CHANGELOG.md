@@ -6,6 +6,11 @@ Each entry is taken from the Git tags, the GitHub release notes and the merged p
 
 ## [Unreleased]
 
+### Changed
+
+- The desktop app is now called CCA: `CCA.app` on macOS, and the display name CCA on Windows, where the program file stays `Claude Accounts.exe` for now. Release files are named `CCA-…`. The app keeps its identifier (`dev.cca.accounts`) and its data folder, so copies of 0.1.x update to it; an updated Mac keeps the folder name `Claude Accounts.app`.
+- `uninstall.sh` removes the desktop app under either name. `publish.sh` can publish full zips only (`NO_UPDATE_ZIP=1`).
+
 ### Added
 
 - `cca version` and `cca --version` on macOS and Windows. The version comes from `desktop/package.json`; `npm version` writes it into `cca.zsh` and `cca.ps1`, and CI fails if they differ.
@@ -22,6 +27,7 @@ Each entry is taken from the Git tags, the GitHub release notes and the merged p
 
 ### Changed
 
+- CI: unit tests for the desktop updater's release file choice, including the rules of the installed 0.1.12 updater.
 - CI: the workflow token is read-only; CI also syntax-checks `install.sh` and `uninstall.sh` and checks the CLI versions against `desktop/package.json`.
 - The desktop app's package description now matches the CCA name. The installed app's name is unchanged.
 - Tests: both suites start from a clean environment, keep every file inside the temporary folder, and stub LaunchServices, the process list, `open` and `launchctl`; `uninstall.sh` is now tested in a throwaway folder.

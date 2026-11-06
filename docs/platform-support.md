@@ -10,8 +10,8 @@
 | Backup and restore | Supported | Supported |
 | Daily autobackup | Supported (launchd) | Supported (Task Scheduler) |
 | Claude app copy per account (`cca app`, `cca open`) | Supported | Supported |
-| Claude Accounts desktop app | Supported (Apple silicon and Intel) | Supported (x64) |
-| Claude Accounts self-update | Supported | Supported |
+| CCA desktop app | Supported (Apple silicon and Intel) | Supported (x64) |
+| CCA desktop app self-update | Supported | Supported |
 | Claude in Chrome per account (`cca chrome`) | Supported | Not available |
 | Restart after Claude app updates (`cca update`, `cca autoupdate`) | Supported | Not available |
 | `cca import` (old name of `restore`) | Supported | Not available |
@@ -46,7 +46,7 @@ Real-install use on Windows: the Windows port itself ([#1](https://github.com/Ab
 | Removed accounts go to | the Trash | the Recycle Bin |
 | Backups | APFS clones | plain copies |
 | `cca list` sign-in check | reads `.claude.json` (with jq, or a simpler pattern without it) | reads `.claude.json` and asks `claude auth status` |
-| Claude Accounts app and the CLI | needs `install.sh` first | carries its own `cca.ps1` |
+| CCA desktop app and the CLI | needs `install.sh` first | carries its own `cca.ps1` |
 
 ## Known gaps
 

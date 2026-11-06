@@ -71,7 +71,7 @@ Running `install.sh` again replaces `~/.claude-accounts/cca.zsh` and leaves `~/.
 - deletes `~/.claude-accounts/cca.zsh`
 - removes the daily backup and autoupdate jobs (`~/Library/LaunchAgents/dev.cca.backup.plist`, `dev.cca.update.plist`)
 - deletes the launchers that `cca app` made in `~/Applications`
-- deletes the Claude Accounts app from `/Applications` or `~/Applications`, but only if its bundle identifier is `dev.cca.accounts`
+- deletes the CCA desktop app (`CCA.app`, or `Claude Accounts.app` for a copy updated from an older version) from `/Applications` or `~/Applications`, but only if its bundle identifier is `dev.cca.accounts`
 
 It keeps your account data: `~/.claude-accounts` with every account's configuration, desktop data, bindings and backups. Keychain items named `Claude Code-credentials-<hash>` also stay; remove them in Keychain Access if you want.
 
@@ -137,17 +137,19 @@ Remove-Item -Recurse -Force "$HOME\.claude-accounts"
 
 This cannot be undone.
 
-## The Claude Accounts desktop app
+## The CCA desktop app
 
 The desktop app is optional. Download it from [GitHub Releases](https://github.com/AbbasAlsbihawi/cca/releases/latest):
 
 | Platform | File |
 |---|---|
-| macOS, Apple silicon | `ClaudeAccounts-<version>-arm64-mac.dmg` |
-| macOS, Intel | `ClaudeAccounts-<version>-x64-mac.dmg` |
-| Windows, x64 | `ClaudeAccounts-Setup-<version>.exe` |
+| macOS, Apple silicon | `CCA-<version>-arm64-mac.dmg` |
+| macOS, Intel | `CCA-<version>-x64-mac.dmg` |
+| Windows, x64 | `CCA-Setup-<version>.exe` |
 
 - **macOS:** install the CLI with `./install.sh` first; the app runs `~/.claude-accounts/cca.zsh`.
 - **Windows:** the installer carries its own copy of `cca.ps1` and puts it in `~\.claude-accounts` when it is missing. Run `.\install.ps1` as well if you want the `cca` command in PowerShell.
+
+Releases before 0.2.0 called the app "Claude Accounts" and named their files `ClaudeAccounts-…`. An older copy updates itself to CCA. On a Mac it keeps the folder name `Claude Accounts.app`, and on Windows the program file stays `Claude Accounts.exe` for now. Your accounts and settings in `~/.claude-accounts` are not affected.
 
 The builds are not signed with a paid developer certificate. First-launch steps, updates and limitations: [desktop.md](desktop.md#install).
