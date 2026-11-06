@@ -24,6 +24,17 @@ $script:CCA_MAIN_APP_DATA = Get-CcaEnv 'CCA_MAIN_APP_DATA' (Join-Path $env:APPDA
 $script:CCA_SHARED = @('settings.json', 'CLAUDE.md', 'skills', 'plugins', 'agents', 'commands', 'output-styles', 'keybindings.json')
 $script:CCA_SCRIPT = $MyInvocation.MyCommand.Path
 
+# The desktop app's New Terminal starts PowerShell with CCA_ACCOUNT in the
+# environment, which cca.zsh reads directly on macOS. Take it as this terminal's
+# `cca use` choice unless one is already set, then drop it from the environment:
+# the PowerShell variable stays the only copy, so `cca use -` clears it and
+# programs started from this terminal do not inherit it. A name that is not an
+# account is kept, so `claude` stops with an error instead of picking another.
+if ($env:CCA_ACCOUNT) {
+    if (-not $global:CCA_ACCOUNT) { $global:CCA_ACCOUNT = $env:CCA_ACCOUNT }
+    Remove-Item Env:\CCA_ACCOUNT -ErrorAction SilentlyContinue
+}
+
 function Write-CcaErr([string]$msg) { [Console]::Error.WriteLine("cca: $msg") }
 
 # Set by a command that failed; `cca` and `claude` turn it into $LASTEXITCODE on the
@@ -242,6 +253,7 @@ function Invoke-CcaUse($a) {
         }
         { $_ -eq '-' -or $_ -eq 'off' } {
             Remove-Variable -Name CCA_ACCOUNT -Scope Global -ErrorAction SilentlyContinue
+            Remove-Item Env:\CCA_ACCOUNT -ErrorAction SilentlyContinue
             Write-Host 'This terminal follows folder bindings again.'
         }
         default {

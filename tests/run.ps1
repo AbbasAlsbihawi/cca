@@ -21,6 +21,13 @@
 # script alone, so the step's own 'stop' is back the moment the script ends.
 $ErrorActionPreference = 'Continue'
 
+# Nothing from the real session may reach cca.ps1: drop every inherited CCA_*
+# variable and CLAUDE_CONFIG_DIR before the first test. newbox sets the ones a
+# test needs.
+Get-ChildItem Env: | Where-Object { $_.Name -like 'CCA_*' } | ForEach-Object { Remove-Item -LiteralPath "Env:\$($_.Name)" }
+Remove-Item Env:\CLAUDE_CONFIG_DIR -ErrorAction SilentlyContinue
+Remove-Variable -Name CCA_ACCOUNT -Scope Global -ErrorAction SilentlyContinue
+
 $repo = Split-Path -Parent $PSScriptRoot
 $cca = Join-Path $repo 'cca.ps1'
 $shim = Join-Path (Join-Path (Join-Path $repo 'desktop') 'main') 'cca-shim.ps1'
@@ -58,6 +65,7 @@ function newbox {
     $env:CCA_LAUNCHERS = Join-Path $t 'launchers'
     New-Item -ItemType Directory -Force -Path $env:CCA_HOME, $env:CCA_MAIN_DIR | Out-Null
     Remove-Variable -Name CCA_ACCOUNT -Scope Global -ErrorAction SilentlyContinue
+    Remove-Item Env:\CCA_ACCOUNT -ErrorAction SilentlyContinue
     $script:boxes += $t
     $t
 }
@@ -333,28 +341,62 @@ if (Test-Path -LiteralPath (Join-Path $env:CCA_HOME 'colors\default.txt')) { bad
 else { ok 'colours: remove forgets the colour' }
 Remove-Item Env:\CCA_CLAUDE_EXE -ErrorAction SilentlyContinue
 
-# Known bugs, recorded before they are fixed (docs/launch/PHASE-3A-REPORT.md).
-# known <bug> <name> <fixed>: a known bug that starts to pass fails the run, so
-# its check must then become a normal one.
-$script:known = 0
-function known($bug, $name, $fixed) {
-    if ($fixed) { "FAIL - ${name}: $bug looks fixed; make this a normal check"; $script:fail++ }
-    else { "xfail - $name ($bug, known bug)"; $script:known++ }
+# The desktop app's New Terminal starts PowerShell with CCA_ACCOUNT in the
+# environment. cca.ps1 takes it as the terminal's `cca use` choice unless one is
+# already set, removes it from the environment, and lets a name that is not an
+# account fail instead of picking another one.
+function like($name, $pattern, $text) {
+    if ($text -like $pattern) { ok $name } else { bad $name "text like '$pattern'" "'$text'" }
 }
-
-# BUG-002: the desktop app's New Terminal starts PowerShell with the environment
-# variable CCA_ACCOUNT set, but cca.ps1 reads only the PowerShell variable that
-# `cca use` sets, so the new window does not use the chosen account.
 $box = newbox
-New-Item -ItemType Directory -Force -Path (Join-Path $env:CCA_HOME 'profiles\personal') | Out-Null
+foreach ($n in 'personal', 'other') {
+    New-Item -ItemType Directory -Force -Path (Join-Path $env:CCA_HOME "profiles\$n") | Out-Null
+}
 stubclaude (Join-Path $box 'bin')
 $env:CCA_QUIET = '1'
-$env:CCA_ACCOUNT = 'personal'
+
 . $cca
 $out = (claude 2>$null) -join ' '
-known 'BUG-002' 'New Terminal: CCA_ACCOUNT from the environment picks the account' ($out -like '*profiles*personal*')
-Remove-Item Env:\CCA_ACCOUNT, Env:\CCA_QUIET -ErrorAction SilentlyContinue
-if ($script:known) { "$script:known known bugs (xfail)" }
+if ($out -like '*profiles*') { bad 'account env: none set uses the default' 'the default account' "'$out'" }
+else { ok 'account env: none set uses the default' }
+
+$env:CCA_ACCOUNT = 'personal'
+. $cca
+like 'account env: a valid name picks that account' '*profiles?personal*' ((claude 2>$null) -join ' ')
+eq 'account env: removed from the environment' $null $env:CCA_ACCOUNT
+eq 'account env: becomes the cca use choice' 'personal' $global:CCA_ACCOUNT
+
+code 'account env: cca use switches away' 0 { cca use other }
+like 'account env: the switch is used' '*profiles?other*' ((claude 2>$null) -join ' ')
+
+$env:CCA_ACCOUNT = 'personal'
+. $cca
+like 'account env: an explicit cca use choice wins' '*profiles?other*' ((claude 2>$null) -join ' ')
+
+code 'account env: cca use - exits 0' 0 { cca use - }
+eq 'account env: cca use - clears the choice' $null $global:CCA_ACCOUNT
+$out = (claude 2>$null) -join ' '
+if ($out -like '*profiles*') { bad 'account env: after cca use - the default is used' 'the default account' "'$out'" }
+else { ok 'account env: after cca use - the default is used' }
+
+$env:CCA_ACCOUNT = 'nosuch'
+. $cca
+code 'account env: an unknown name makes claude fail' 1 { claude }
+$out = (claude 2>$null) -join ' '
+if ($out -like '*CFG=*') { bad 'account env: an unknown name runs nothing' 'no claude run' "'$out'" }
+else { ok 'account env: an unknown name runs nothing' }
+cca use - 6>$null | Out-Null
+
+# A fresh PowerShell process, the way New Terminal starts one.
+$env:CCA_ACCOUNT = 'personal'
+$child = & $pshost -NoProfile -Command ". '$cca'; claude" 2>$null
+Remove-Item Env:\CCA_ACCOUNT -ErrorAction SilentlyContinue
+like 'account env: a new PowerShell process uses it' '*profiles?personal*' (@($child) -join ' ')
+
+$box = newbox
+. $cca
+eq 'account env: a new box starts with no choice' $null $global:CCA_ACCOUNT
+Remove-Item Env:\CCA_QUIET -ErrorAction SilentlyContinue
 
 foreach ($b in $script:boxes) { Remove-Item -LiteralPath $b -Recurse -Force -ErrorAction SilentlyContinue }
 

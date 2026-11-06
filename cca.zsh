@@ -495,6 +495,11 @@ _cca_launcher() {
   print -r -- "$HOME/Applications/Claude ${(C)1}.app"
 }
 
+# LaunchServices registration, in one place so tests can replace it.
+_cca_lsregister() {
+  /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister "$@"
+}
+
 # Makes "~/Applications/Claude <Name>.app", a launcher for `cca open <name>`.
 _cca_app() {
   emulate -L zsh
@@ -542,7 +547,7 @@ _cca_app() {
   codesign --force --sign - $dest 2>/dev/null
   touch $dest
   # Make Finder and the Dock show the new icon now, not a cached one.
-  /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f $dest 2>/dev/null
+  _cca_lsregister -f $dest 2>/dev/null
   print -r -- "Made: $dest"
   if [[ $name != "$(_cca_default_name)" && ! -d $CCA_HOME/desktop/$name ]]; then
     print -r -- "First sign-in: quit every Claude window (Cmd+Q), open 'Claude ${(C)name}', sign in, then reopen the others."
@@ -1025,9 +1030,27 @@ _cca_autoupdate() {
 }
 
 # Prints one field of the oauthAccount in a .claude.json: _cca_oauth <file> <field>.
+# Prints nothing when the account is not logged in. Without jq it reads the flat
+# oauthAccount object with a pattern, as _cca_account_uuid does. If the file has
+# an oauthAccount that cannot be read that way, it returns 2, so callers say the
+# login is unknown instead of "not logged in".
 _cca_oauth() {
-  [[ -r $1 ]] && (( $+commands[jq] )) || return 0
-  jq -r --arg f $2 '.oauthAccount[$f] // empty' $1 2>/dev/null
+  emulate -L zsh
+  local json body v
+  [[ -r $1 ]] || return 0
+  if (( $+commands[jq] )); then
+    jq -r --arg f $2 '.oauthAccount[$f] // empty' $1 2>/dev/null
+    return 0
+  fi
+  json=$(<$1)
+  [[ $json == *'"oauthAccount"'* ]] || return 0
+  [[ $json =~ '"oauthAccount"[[:space:]]*:[[:space:]]*null' ]] && return 0
+  [[ $json =~ '"oauthAccount"[[:space:]]*:[[:space:]]*\{([^{}]*)\}' ]] || return 2
+  body=$match[1]
+  [[ $body =~ '"'$2'"[[:space:]]*:[[:space:]]*"(([^"\\]|\\.)*)"' ]] || return 0
+  v=$match[1]
+  v=${v//\\\"/\"} v=${v//\\\//\/} v=${v//\\\\/\\}
+  print -r -- $v
 }
 
 # Prints $1 as a JSON string (quoted and escaped); an empty value prints null.
@@ -1063,15 +1086,17 @@ _cca_jarr() {
 # Prints everything `cca list --json` reports, as one JSON object.
 _cca_list_json() {
   emulate -L zsh
-  local name dir json email org app res color p n sep accts chrome line csep
+  local name dir json email org app res color p n sep accts chrome line csep logged
+  integer unk
   local default=$(_cca_default_name 2>/dev/null)
   local -a folders
   for name in ${(f)"$(_cca_profiles 2>/dev/null)"}; do
     dir=$(_cca_dir $name 2>/dev/null)
     json=${dir:+$dir/.claude.json}
     json=${json:-$CCA_MAIN_JSON}
-    email=$(_cca_oauth $json emailAddress 2>/dev/null)
+    email=$(_cca_oauth $json emailAddress 2>/dev/null); unk=$?
     org=$(_cca_oauth $json organizationName 2>/dev/null)
+    if [[ -n $email ]]; then logged=true; elif (( unk == 2 )); then logged=null; else logged=false; fi
     app=$(_cca_launcher $name) res=$app/Contents/Resources color=
     [[ -e $res/cca-account ]] || app=
     [[ -r $res/cca-color ]] && color=$(<$res/cca-color)
@@ -1083,7 +1108,7 @@ _cca_list_json() {
       done < $CCA_HOME/bindings
     fi
     accts+="$sep{\"name\":$(_cca_jstr $name),\"isDefault\":$([[ $name == "$default" ]] && print true || print false)"
-    accts+=",\"email\":$(_cca_jstr $email),\"org\":$(_cca_jstr $org),\"loggedIn\":$([[ -n $email ]] && print true || print false)"
+    accts+=",\"email\":$(_cca_jstr $email),\"org\":$(_cca_jstr $org),\"loggedIn\":$logged"
     accts+=",\"color\":$(_cca_jstr $color),\"app\":$(_cca_jstr $app),\"chrome\":$(_cca_jstr "$(_cca_chrome_linked $name 2>/dev/null)")"
     accts+=",\"running\":$(_cca_app_pid $name >/dev/null 2>&1 && print true || print false),\"folders\":$(_cca_jarr $folders)}"
     sep=,
@@ -1100,16 +1125,18 @@ _cca_list() {
   emulate -L zsh
   [[ $1 == --json ]] && { _cca_list_json; return }
   local r=$(_cca_resolve) name dir json email org mark
+  integer unk
   local here=${r%%$'\t'*}
   for name in ${(f)"$(_cca_profiles)"}; do
     dir=$(_cca_dir $name)
     json=${dir:+$dir/.claude.json}
     json=${json:-$CCA_MAIN_JSON}
-    email=$(_cca_oauth $json emailAddress)
+    email=$(_cca_oauth $json emailAddress); unk=$?
     org=$(_cca_oauth $json organizationName)
+    [[ -z $email ]] && { (( unk == 2 )) && email='login unknown (install jq)' || email='not logged in' }
     mark=' '
     [[ $name == "$here" ]] && mark='*'
-    printf '%s %-14s %s\n' $mark $name "${email:-not logged in}${org:+  ($org)}"
+    printf '%s %-14s %s\n' $mark $name "$email${org:+  ($org)}"
   done
 }
 
@@ -1139,7 +1166,7 @@ _cca_help() {
   cca bind <name> [folder]   always use an account in a folder and its subfolders
   cca unbind [folder]        remove a folder binding
   cca run <name> [args]      run claude once with an account
-  cca list [--json]          list accounts with their emails (--json: for scripts and the Mac app)
+  cca list [--json]          list accounts with their emails (--json: for scripts and the desktop app)
   cca app <name> [color]     make a 'Claude <Name>' app in ~/Applications for that account
                              (colors: red orange yellow green teal blue purple pink gray)
   cca open <name>            open the Claude app for an account (or bring it to the front)
