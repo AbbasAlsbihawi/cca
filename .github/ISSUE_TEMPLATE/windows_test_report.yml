@@ -1,0 +1,86 @@
+name: Windows test report
+description: Share what worked and what did not when you tried CCA on Windows.
+title: "[Windows test]: "
+labels: ["windows", "platform-test"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing CCA on Windows. Reports of things that work are as useful as reports of things that fail.
+
+        **Do not share credentials, tokens, cookies, the contents of `.claude.json`, conversation transcripts or real account emails.** Replace them with placeholders.
+  - type: input
+    id: windows_version
+    attributes:
+      label: Windows version
+      placeholder: "Windows 11 24H2 (x64)"
+    validations:
+      required: true
+  - type: dropdown
+    id: powershell
+    attributes:
+      label: PowerShell version
+      multiple: true
+      options:
+        - Windows PowerShell 5.1
+        - PowerShell 7
+    validations:
+      required: true
+  - type: input
+    id: cca_version
+    attributes:
+      label: CCA version
+      description: The release tag, the commit of your clone (`git rev-parse --short HEAD`), or the desktop app version from its General page.
+      placeholder: "v0.1.12"
+    validations:
+      required: true
+  - type: input
+    id: claude_versions
+    attributes:
+      label: Claude Code and Claude desktop app versions
+      description: "`claude --version`, and the desktop app's version (Help or About)."
+    validations:
+      required: true
+  - type: dropdown
+    id: dev_mode
+    attributes:
+      label: Is Developer Mode on?
+      description: Without it, CCA uses junctions and hard links instead of symlinks for shared files.
+      options:
+        - "Yes"
+        - "No"
+        - Not sure
+  - type: checkboxes
+    id: tested
+    attributes:
+      label: What did you test?
+      options:
+        - label: install.ps1 and opening a new PowerShell window
+        - label: cca add / cca login
+        - label: cca use / cca bind / cca run, and which account claude used
+        - label: cca list and cca (status)
+        - label: cca app / cca open (Claude app copy per account, Start menu shortcut, colours)
+        - label: cca backup / cca restore / cca autobackup
+        - label: cca remove
+        - label: The Claude Accounts desktop app (install, account pages, General page)
+        - label: The desktop app's New Terminal
+        - label: The desktop app's self-update
+        - label: uninstall.ps1
+  - type: textarea
+    id: results
+    attributes:
+      label: Results
+      description: For each item you tested, say whether it worked. Describe anything surprising.
+    validations:
+      required: true
+  - type: textarea
+    id: failures
+    attributes:
+      label: Steps to reproduce failures
+      description: Exact commands or clicks for anything that failed.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output or logs
+      description: Remove emails, tokens and other personal data first.
+      render: text
