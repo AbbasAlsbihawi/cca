@@ -30,8 +30,8 @@ jobs:
       # cca.zsh and cca.ps1 carry the version from desktop/package.json.
       - name: Check the CLI versions match desktop/package.json
         run: node desktop/scripts/sync-version.js --check
-      - name: Unit tests for the desktop updater's release file choice
-        run: node --test desktop/test/updater-assets.test.js
+      - name: Unit tests for the desktop app (updater release file choice, userData folder)
+        run: node --test desktop/test/updater-assets.test.js desktop/test/userdata-path.test.js
 
   windows-powershell:
     runs-on: windows-latest
