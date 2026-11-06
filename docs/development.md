@@ -60,6 +60,8 @@ npm run dist:all
 npm run release
 ```
 
+`desktop/package.json` holds the one CCA version. `npm version` runs `scripts/sync-version.js` as its `version` script, which writes the same version into `cca.zsh` and `cca.ps1`, so `cca --version` always matches the release. CI runs `node desktop/scripts/sync-version.js --check` and fails if they differ; `npm run sync:version` fixes a mismatch by hand.
+
 To publish a version whose installer has not been tried on its own platform yet, add `-- --prerelease`. GitHub then marks the release as not production ready; the tag and the assets are the same.
 
 Both platforms are unsigned (macOS builds are ad-hoc signed). The Windows artifacts are cross-built from macOS.

@@ -169,10 +169,11 @@ Every account shares your default account's `settings.json`, `CLAUDE.md`, skills
 | `cca chrome [<name> [<profile>\|--unlink]]` | List Chrome profiles, link one to an account, or open Chrome in it (macOS). |
 | `cca remove <name>` | Log an account out and move its folders and launcher to the Trash (Recycle Bin on Windows). |
 | `cca backup [--quiet\|list]` | Save every account's conversations; `list` shows the snapshots. |
-| `cca restore <name> [snapshot] [-n] [--account <uuid>]` | Bring an account's conversations back, never overwriting anything (`-n` and `--account`: macOS only). |
+| `cca restore <name> [snapshot] [-n] [--account <uuid>]` | Bring an account's conversations back, never overwriting anything (`-n`: dry run). |
 | `cca autobackup on\|off\|status` | A daily backup at 13:00. |
 | `cca update` | Quit and reopen every open Claude app copy so each runs the installed version (macOS). |
 | `cca autoupdate on\|off\|status` | Do that automatically after the Claude app updates (macOS). |
+| `cca version` | Show the installed CCA version (also `cca --version`). |
 | `cca help` | Show the built-in help. |
 
 Which account `claude` uses, first match wins:
@@ -220,7 +221,7 @@ More detail: [docs/privacy-security.md](docs/privacy-security.md). Security poli
 | Area | macOS | Windows |
 |---|---|---|
 | CLI: accounts, `use`, `bind`, `run`, `list`, `remove` | Supported | Supported |
-| Backup, restore, daily autobackup | Supported | Supported; `restore` has no `--dry-run` or `--account` |
+| Backup, restore, daily autobackup | Supported | Supported |
 | Claude app copy per account (`cca app`, `cca open`) | Supported | Supported |
 | Claude Accounts app | Supported (Apple silicon and Intel) | Supported (x64) |
 | Claude Accounts app self-update | Supported | Supported |

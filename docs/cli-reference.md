@@ -11,6 +11,7 @@ Every command below works on macOS (`cca.zsh`) and Windows (`cca.ps1`) unless it
 - [Claude desktop app](#claude-desktop-app): `app`, `open`, `update`, `autoupdate`
 - [Claude in Chrome](#claude-in-chrome): `chrome`
 - [Backups](#backups): `backup`, `restore`, `autobackup`, `import`
+- [Version](#version): `version`
 - [Environment variables](#environment-variables)
 
 ## How `claude` picks an account
@@ -194,7 +195,7 @@ cca restore personal --dry-run            # show what would be copied; change no
 cca restore personal --account <uuid>     # say which Claude account its sessions belong to
 ```
 
-On Windows, `cca restore` takes only `<name>` and `[snapshot]`: there is no dry run and no `--account`.
+The options work the same on macOS and Windows and can come in any order. `--account` needs a value; a value that is not a plain account ID is ignored.
 
 ### `cca autobackup on|off|status`
 
@@ -203,6 +204,12 @@ A daily backup at 13:00. A missed run happens at the next wake (macOS) or the ne
 ### `cca import` (macOS)
 
 The older name of `cca restore`. On Windows it prints that it is not available; use `cca restore`.
+
+## Version
+
+### `cca version` (or `cca --version`)
+
+Prints the installed version, for example `cca 0.1.12`. It works without jq, without a network connection and outside the repository. The version comes from `desktop/package.json`; see [Development](development.md#releasing).
 
 ## Environment variables
 

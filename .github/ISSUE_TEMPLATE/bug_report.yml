@@ -78,8 +78,8 @@ body:
     id: cca_version
     attributes:
       label: CCA version
-      description: The release tag you installed, or the commit of your clone (`git rev-parse --short HEAD`). For the desktop app, the version on its General page.
-      placeholder: "v0.1.12, or a1b2c3d"
+      description: The output of `cca --version` (0.1.12 and older have no such command; give the release tag or the commit of your clone). For the desktop app, the version on its General page.
+      placeholder: "cca 0.1.12"
     validations:
       required: true
   - type: input

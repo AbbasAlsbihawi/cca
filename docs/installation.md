@@ -57,7 +57,7 @@ git pull
 ./install.sh
 ```
 
-Running `install.sh` again replaces `~/.claude-accounts/cca.zsh` and leaves `~/.zshrc` alone. Terminals that are already open load the new version on their next `cca` command.
+Running `install.sh` again replaces `~/.claude-accounts/cca.zsh` and leaves `~/.zshrc` alone. Terminals that are already open load the new version on their next `cca` command. Check it with `cca --version`.
 
 ### Uninstall
 
@@ -121,7 +121,7 @@ git pull
 .\install.ps1
 ```
 
-Then open a new PowerShell window.
+Then open a new PowerShell window, and check the version with `cca --version`.
 
 ### Uninstall
 

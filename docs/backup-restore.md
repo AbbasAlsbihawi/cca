@@ -41,7 +41,7 @@ cca backup                                # take a snapshot now
 cca backup list                           # snapshots, newest first
 cca restore personal                      # bring conversations back from the newest snapshot
 cca restore personal 2026-05-01_130000    # from a chosen snapshot
-cca restore personal --dry-run            # show what would be copied; change nothing (macOS)
+cca restore personal --dry-run            # show what would be copied; change nothing
 cca autobackup on                         # every day at 13:00 (off to stop, status to check)
 ```
 
@@ -56,22 +56,21 @@ While autobackup is on, `cca remove` and `cca login` take a backup first. With a
 Logging out inside a Claude app copy hides its conversations from the Code tab, but does not delete them. `cca restore <name>` brings them back:
 
 1. It copies files that are missing from the newest snapshot that has the account (or the snapshot you name).
-2. For an account other than the default one, it also copies the account's Code tab sessions from the main Claude app, with the transcripts they point to. These are sessions the account used in the main app before it had its own copy. The account is found from its terminal login (`cca login`), or from the one account its copy has signed in with. Otherwise pass `--account <uuid>` (macOS).
+2. For an account other than the default one, it also copies the account's Code tab sessions from the main Claude app, with the transcripts they point to. These are sessions the account used in the main app before it had its own copy. The account is found from its terminal login (`cca login`), or from the one account its copy has signed in with. Otherwise pass `--account <uuid>`.
 3. It moves the "deleted" marks of those sessions to the Trash (Recycle Bin on Windows), so they show again.
 
 Rules:
 
 - Quit that account's Claude app copy first. `cca restore` refuses while it is open.
 - Restore never overwrites a file. A file that is already there stays as it is, and the summary says how many were left alone.
-- `--dry-run` (`-n`) shows what would be copied and which marks would move, without changing anything (macOS).
+- `--dry-run` (`-n`) shows what would be copied and which marks would move, without changing anything: no folder is created, no file copied, no mark moved.
 - A session whose transcript is not on this computer is listed but cannot be opened.
 
-`cca import` is the older name of `cca restore` (macOS).
+`cca import` is the older name of `cca restore` (macOS only).
 
 ## Windows differences
 
 - Snapshots are plain copies, not clones.
-- `cca restore` takes only `<name>` and `[snapshot]`: no `--dry-run`, no `--account`.
 - `cca import` is not available.
 - Chrome profile links are not part of Windows backups.
 

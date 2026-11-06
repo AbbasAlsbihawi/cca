@@ -17,7 +17,7 @@ Please do not disclose the problem publicly until a fix is released or we have a
 
 - what the problem is and what an attacker could do with it
 - the steps to reproduce it, ideally on a test account or a throwaway setup
-- your platform (macOS or Windows and its version) and the CCA version: the release tag or the commit (`git rev-parse --short HEAD`) of your clone, and the desktop app version from its General page
+- your platform (macOS or Windows and its version) and the CCA version: the output of `cca --version` (or, for 0.1.12 and older, the release tag or the commit of your clone), and the desktop app version from its General page
 - whether you have a fix in mind
 
 Do **not** send credentials, tokens, cookies, keychain items, the contents of `.claude.json` or `.credentials` files, conversation transcripts or real account emails. Replace them with placeholders. If a log is needed, remove those values first.

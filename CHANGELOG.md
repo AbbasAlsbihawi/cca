@@ -6,7 +6,14 @@ Each entry is taken from the Git tags, the GitHub release notes and the merged p
 
 ## [Unreleased]
 
+### Added
+
+- `cca version` and `cca --version` on macOS and Windows. The version comes from `desktop/package.json`; `npm version` writes it into `cca.zsh` and `cca.ps1`, and CI fails if they differ.
+- Windows: `cca restore` takes `--dry-run` (`-n`) and `--account <uuid>`, as on macOS. A dry run creates, copies and moves nothing.
+
 ### Fixed
+
+- `cca restore --account` without a value is an error instead of being ignored (macOS).
 
 - macOS: `uninstall.sh` also removes the autoupdate job; before, it kept running every minute after an uninstall.
 - Windows: the desktop app's *New Terminal* opens PowerShell on the chosen account. `cca.ps1` now takes `CCA_ACCOUNT` from the environment unless `cca use` picked another account.
@@ -15,6 +22,8 @@ Each entry is taken from the Git tags, the GitHub release notes and the merged p
 
 ### Changed
 
+- CI: the workflow token is read-only; CI also syntax-checks `install.sh` and `uninstall.sh` and checks the CLI versions against `desktop/package.json`.
+- The desktop app's package description now matches the CCA name. The installed app's name is unchanged.
 - Tests: both suites start from a clean environment, keep every file inside the temporary folder, and stub LaunchServices, the process list, `open` and `launchctl`; `uninstall.sh` is now tested in a throwaway folder.
 - The project is presented as CCA, a multi-account manager for Claude Code and the Claude desktop app. The repository, the `cca` command and the desktop app's current name are unchanged.
 
