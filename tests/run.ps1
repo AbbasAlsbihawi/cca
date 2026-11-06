@@ -333,6 +333,29 @@ if (Test-Path -LiteralPath (Join-Path $env:CCA_HOME 'colors\default.txt')) { bad
 else { ok 'colours: remove forgets the colour' }
 Remove-Item Env:\CCA_CLAUDE_EXE -ErrorAction SilentlyContinue
 
+# Known bugs, recorded before they are fixed (docs/launch/PHASE-3A-REPORT.md).
+# known <bug> <name> <fixed>: a known bug that starts to pass fails the run, so
+# its check must then become a normal one.
+$script:known = 0
+function known($bug, $name, $fixed) {
+    if ($fixed) { "FAIL - ${name}: $bug looks fixed; make this a normal check"; $script:fail++ }
+    else { "xfail - $name ($bug, known bug)"; $script:known++ }
+}
+
+# BUG-002: the desktop app's New Terminal starts PowerShell with the environment
+# variable CCA_ACCOUNT set, but cca.ps1 reads only the PowerShell variable that
+# `cca use` sets, so the new window does not use the chosen account.
+$box = newbox
+New-Item -ItemType Directory -Force -Path (Join-Path $env:CCA_HOME 'profiles\personal') | Out-Null
+stubclaude (Join-Path $box 'bin')
+$env:CCA_QUIET = '1'
+$env:CCA_ACCOUNT = 'personal'
+. $cca
+$out = (claude 2>$null) -join ' '
+known 'BUG-002' 'New Terminal: CCA_ACCOUNT from the environment picks the account' ($out -like '*profiles*personal*')
+Remove-Item Env:\CCA_ACCOUNT, Env:\CCA_QUIET -ErrorAction SilentlyContinue
+if ($script:known) { "$script:known known bugs (xfail)" }
+
 foreach ($b in $script:boxes) { Remove-Item -LiteralPath $b -Recurse -Force -ErrorAction SilentlyContinue }
 
 "$script:pass passed, $script:fail failed"

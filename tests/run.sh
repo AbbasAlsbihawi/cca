@@ -623,5 +623,28 @@ crun 'cca chrome' >/dev/null
 eq "chrome: a new read replaces the kept profiles" "Default"$'\t'"Person 1" "$(<$A/chrome-profiles-seen 2>&1)"
 unset CD CSTUBS
 
+# 23. known bugs, recorded before they are fixed (docs/launch/PHASE-3A-REPORT.md)
+# known <bug> <name> <status>: status 0 means the bug looks fixed. A known bug
+# that starts to pass fails the run, so its check must then become a normal one.
+integer known_bugs=0
+known() {
+  if (( $3 == 0 )); then print -r -- "FAIL - $2: $1 looks fixed; make this a normal check"; fail+=1
+  else print -r -- "xfail - $2 ($1, known bug)"; known_bugs+=1; fi
+}
+mk_home
+# BUG-001: uninstall.sh removes the daily backup job but leaves the autoupdate
+# job running. Checked by reading the script: running uninstall.sh here would
+# reach the real /Applications and launchd.
+grep -q 'dev.cca.update.plist' $REPO/uninstall.sh
+known BUG-001 "uninstall.sh removes the autoupdate job" $?
+# BUG-003: without jq, every account is listed as not logged in.
+eq "list shows the email with jq" 1 "$(run 'cca list' | grep -c main@co.com)"
+[[ $(run 'path=($T/bin); cca list') == *main@co.com* ]]
+known BUG-003 "list shows the email without jq" $?
+# BUG-004: the help text calls the desktop app "the Mac app".
+[[ $(run 'cca help') != *"Mac app"* ]]
+known BUG-004 "help does not call the desktop app the Mac app" $?
+(( known_bugs )) && print -r -- "$known_bugs known bugs (xfail)"
+
 print -r -- "$pass passed, $fail failed"
 (( fail == 0 ))
