@@ -1,11 +1,15 @@
 name: test
 on: [push, pull_request]
+# Tests only read the repository.
+permissions:
+  contents: read
 jobs:
   test:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - run: zsh -n cca.zsh
+      - run: sh -n install.sh && sh -n uninstall.sh
       - run: zsh tests/run.sh
       # GitHub dot-sources the step body, so a called script's `exit` lands in
       # $LASTEXITCODE rather than failing the step: pass it on, or a parse error
@@ -20,9 +24,12 @@ jobs:
           node-version-file: .nvmrc
       - name: Syntax-check the desktop app
         run: |
-          for f in $(find desktop/main desktop/renderer -name '*.js') desktop/preload.js; do
+          for f in $(find desktop/main desktop/renderer desktop/scripts -name '*.js') desktop/preload.js; do
             node --check "$f"
           done
+      # cca.zsh and cca.ps1 carry the version from desktop/package.json.
+      - name: Check the CLI versions match desktop/package.json
+        run: node desktop/scripts/sync-version.js --check
 
   windows-powershell:
     runs-on: windows-latest

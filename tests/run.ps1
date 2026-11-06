@@ -398,6 +398,71 @@ $box = newbox
 eq 'account env: a new box starts with no choice' $null $global:CCA_ACCOUNT
 Remove-Item Env:\CCA_QUIET -ErrorAction SilentlyContinue
 
+# cca version prints the version from desktop/package.json.
+$box = newbox
+. $cca
+$pv = (Get-Content -LiteralPath (Join-Path (Join-Path $repo 'desktop') 'package.json') -Raw | ConvertFrom-Json).version
+eq 'version: cca --version' "cca $pv" ((cca --version) -join '')
+eq 'version: cca version' "cca $pv" ((cca version) -join '')
+code 'version: exits 0' 0 { cca version }
+
+# cca restore: --dry-run changes nothing, --account picks the Claude account
+# whose sessions in the main app are brought over, as on macOS.
+function tree($p) {
+    if (-not (Test-Path -LiteralPath $p)) { return '' }
+    (@(Get-ChildItem -LiteralPath $p -Recurse -Force | ForEach-Object { $_.FullName }) | Sort-Object) -join '|'
+}
+$box = newbox
+foreach ($n in 'personal', 'other', 'third') {
+    New-Item -ItemType Directory -Force -Path (Join-Path $env:CCA_HOME "profiles\$n") | Out-Null
+}
+. $cca
+$snap = '2026-01-02_030405'
+$sb = Join-Path $env:CCA_HOME "backups\$snap\personal"
+New-Item -ItemType Directory -Force -Path (Join-Path $sb 'projects\slug'), (Join-Path $sb 'claude-code-sessions\acct1') | Out-Null
+Set-Content -LiteralPath (Join-Path $sb 'projects\slug\s1.jsonl') -Value 'transcript'
+Set-Content -LiteralPath (Join-Path $sb 'claude-code-sessions\acct1\local_a.json') -Value '{}'
+$s1 = Join-Path $env:CCA_HOME 'profiles\personal\projects\slug\s1.jsonl'
+
+$before = tree $env:CCA_HOME
+$out = (cca restore personal --dry-run 6>&1) -join ' '
+like 'restore -n: says what it would do' '*Would restore*1 sessions*Nothing was changed*' $out
+eq 'restore -n: changes nothing' $before (tree $env:CCA_HOME)
+eq 'restore -n: a second dry run says the same' $out ((cca restore personal -n 6>&1) -join ' ')
+code 'restore: a real run exits 0' 0 { cca restore personal }
+if (Test-Path -LiteralPath $s1) { ok 'restore: copies the transcript' } else { bad 'restore: copies the transcript' $s1 'missing' }
+like 'restore -n: files already there are not counted again' '*0 sessions, 0 transcripts*Already there, left as is: 2 files*' ((cca restore personal -n 6>&1) -join ' ')
+Set-Content -LiteralPath $s1 -Value 'changed'
+cca restore personal 6>$null | Out-Null
+eq 'restore: an existing file is never overwritten' 'changed' ((Get-Content -LiteralPath $s1) -join '')
+
+$main = Join-Path $env:CCA_MAIN_APP_DATA 'claude-code-sessions\uuid-123'
+New-Item -ItemType Directory -Force -Path $main | Out-Null
+Set-Content -LiteralPath (Join-Path $main 'local_m.json') -Value '{"cliSessionId":"sid1"}'
+$before = tree $env:CCA_HOME
+$out = (cca restore other --account uuid-123 -n 6>&1) -join ' '
+like 'restore --account -n: finds that Claude account''s sessions' '*Would restore*the main Claude app: 1 sessions*' $out
+eq 'restore --account -n: changes nothing' $before (tree $env:CCA_HOME)
+eq 'restore -n --account: either order' $out ((cca restore other -n --account uuid-123 6>&1) -join ' ')
+code 'restore --account: a missing value fails' 1 { cca restore other --account }
+code 'restore --account: an unsafe value is not used' 1 { cca restore other --account '..\..\x' }
+code 'restore: an unknown snapshot fails' 1 { cca restore personal 1999-01-01_000000 }
+code 'restore: an unsafe snapshot name fails' 1 { cca restore personal '..\..\x' }
+code 'restore: an extra name fails' 1 { cca restore personal $snap extra }
+code 'restore --account: a real run exits 0' 0 { cca restore other --account uuid-123 }
+$sd = Join-Path $env:CCA_HOME 'desktop\other\claude-code-sessions\uuid-123'
+if (Test-Path -LiteralPath (Join-Path $sd 'local_m.json')) { ok 'restore --account: copies the session' } else { bad 'restore --account: copies the session' 'local_m.json' 'missing' }
+Set-Content -LiteralPath (Join-Path $sd 'deleted_m') -Value ''
+like 'restore -n: counts a deleted mark' '*1 deleted marks to move*' ((cca restore other --account uuid-123 -n 6>&1) -join ' ')
+if (Test-Path -LiteralPath (Join-Path $sd 'deleted_m')) { ok 'restore -n: leaves the deleted mark' } else { bad 'restore -n: leaves the deleted mark' 'kept' 'moved' }
+cca restore other --account uuid-123 6>$null | Out-Null
+if (Test-Path -LiteralPath (Join-Path $sd 'deleted_m')) { bad 'restore: moves the deleted mark to the trash' 'moved' 'kept' } else { ok 'restore: moves the deleted mark to the trash' }
+
+$tb = Join-Path $env:CCA_HOME "backups\$snap\third"
+New-Item -ItemType Directory -Force -Path $tb | Out-Null
+Set-Content -LiteralPath (Join-Path $tb 'projects') -Value 'not a folder'
+code 'restore: a malformed snapshot does not fail' 0 { cca restore third -n }
+
 foreach ($b in $script:boxes) { Remove-Item -LiteralPath $b -Recurse -Force -ErrorAction SilentlyContinue }
 
 "$script:pass passed, $script:fail failed"

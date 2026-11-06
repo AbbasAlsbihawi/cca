@@ -26,6 +26,10 @@
 : ${CCA_CHROME_DATA:="$HOME/Library/Application Support/Google/Chrome"}
 typeset -ga CCA_SHARED=(settings.json CLAUDE.md skills plugins agents commands output-styles keybindings.json)
 
+# The CCA version. desktop/package.json is the source: `npm version` in desktop/
+# rewrites this line (scripts/sync-version.js), and CI fails if it differs.
+typeset -g CCA_VERSION=0.1.12
+
 # Remember which file this shell loaded and when it changed, so `cca` can
 # reload itself after an update instead of running old code.
 typeset -g CCA_SCRIPT=${${(%):-%x}:A}
@@ -767,7 +771,12 @@ _cca_restore() {
   while (( $# )); do
     case $1 in
       -n|--dry-run) dry=1 ;;
-      --account)    acct=$2; shift ;;
+      --account)
+        if [[ -z $2 ]]; then
+          _cca_err "usage: cca restore <name> [snapshot] [--dry-run] [--account <uuid>]: --account needs a value"
+          return 1
+        fi
+        acct=$2; shift ;;
       *)            pos+=$1 ;;
     esac
     shift
@@ -1156,6 +1165,14 @@ _cca_status() {
   fi
 }
 
+_cca_version() {
+  if [[ $CCA_VERSION != <->.<->.<->* ]]; then
+    _cca_err "this copy of cca has no valid version ('$CCA_VERSION')"
+    return 1
+  fi
+  print -r -- "cca $CCA_VERSION"
+}
+
 _cca_help() {
   print -r -- "cca — switch Claude Code between accounts
 
@@ -1180,6 +1197,7 @@ _cca_help() {
   cca autobackup on|off|status   a daily backup at 13:00
   cca update                 quit and reopen every open Claude app copy, so each runs the installed version
   cca autoupdate on|off|status   do that by itself after the Claude app updates
+  cca version                show the installed CCA version (also: cca --version)
 
 Order: cca use > folder binding > default account (~/.claude).
 Set CCA_QUIET=1 to hide the line 'claude' prints about the account."
@@ -1224,6 +1242,7 @@ cca() {
     autobackup)     _cca_autobackup "$@" ;;
     update)         _cca_update "$@" ;;
     autoupdate)     _cca_autoupdate "$@" ;;
+    version|--version) _cca_version ;;
     help|-h|--help) _cca_help ;;
     *)              _cca_err "unknown command '$cmd'"; _cca_help; return 1 ;;
   esac
@@ -1248,7 +1267,7 @@ claude() {
 }
 
 _cca_complete() {
-  local -a cmds=(status list add login use bind unbind run app open chrome remove backup restore autobackup update autoupdate help)
+  local -a cmds=(status list add login use bind unbind run app open chrome remove backup restore autobackup update autoupdate version help)
   if (( CURRENT == 2 )); then
     compadd -a cmds
   elif (( CURRENT == 3 )); then

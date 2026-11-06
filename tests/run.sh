@@ -744,6 +744,40 @@ else
 fi
 unset U LA NOJQ J
 
+# 25. cca version from one version source; restore option values
+mk_home
+PV=$(jq -r .version $REPO/desktop/package.json)
+eq "version: cca --version" "cca $PV" "$(run 'cca --version')"
+eq "version: cca version" "cca $PV" "$(run 'cca version')"
+eq "version: works without jq" "cca $PV" "$(run 'path=($T/bin); cca --version')"
+eq "version: works outside the repository" "cca $PV" "$(run 'cd /; cca version')"
+out=$(run 'CCA_VERSION=bad; cca version'); rc=$?
+no "version: an invalid version fails" $rc
+has "version: says the version is invalid" "no valid version" "$out"
+has "help lists cca version" "cca version" "$(run 'cca help')"
+if command -v node >/dev/null; then
+  node $REPO/desktop/scripts/sync-version.js --check >/dev/null 2>&1; yes "version: the CLIs match desktop/package.json" $?
+  VR=$T/vrepo; mkdir -p $VR/desktop/scripts
+  cp $REPO/cca.zsh $REPO/cca.ps1 $VR/; cp $REPO/desktop/package.json $VR/desktop/; cp $REPO/desktop/scripts/sync-version.js $VR/desktop/scripts/
+  sed -i '' 's/"version": "[^"]*"/"version": "9.8.7"/' $VR/desktop/package.json
+  node $VR/desktop/scripts/sync-version.js --check >/dev/null 2>&1; no "version: a mismatch fails the check" $?
+  eq "version: the check changes nothing" "$(grep '^typeset -g CCA_VERSION' $REPO/cca.zsh)" "$(grep '^typeset -g CCA_VERSION' $VR/cca.zsh)"
+  node $VR/desktop/scripts/sync-version.js >/dev/null 2>&1; yes "version: sync rewrites the lines" $?
+  eq "version: zsh line synced" "typeset -g CCA_VERSION=9.8.7" "$(grep '^typeset -g CCA_VERSION' $VR/cca.zsh)"
+  eq "version: ps1 line synced" "\$script:CCA_VERSION = '9.8.7'" "$(grep 'CCA_VERSION = ' $VR/cca.ps1)"
+  node $VR/desktop/scripts/sync-version.js --check >/dev/null 2>&1; yes "version: the check passes after a sync" $?
+  print -r -- '{"version":"not-a-version"}' > $VR/desktop/package.json
+  node $VR/desktop/scripts/sync-version.js --check >/dev/null 2>&1; no "version: an invalid package version fails" $?
+  unset VR
+else
+  skip "version sync (node missing)"
+fi
+prof personal
+out=$(run 'cca restore personal --account'); rc=$?
+no "restore: --account without a value fails" $rc
+has "restore: says --account needs a value" "--account needs a value" "$out"
+unset PV
+
 # A test that reached a safety stub forgot its own stub; say so.
 for f in open launchctl-path front quit; do
   [[ -s $T/$f.log ]] && print -r -- "note - a test reached the $f safety stub: $(head -1 $T/$f.log)"
