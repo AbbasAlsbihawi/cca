@@ -94,7 +94,8 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "artifactName": "CCA-Setup-${version}.exe"
+      "artifactName": "CCA-Setup-${version}.exe",
+      "include": "build/installer.nsh"
     },
     "publish": {
       "provider": "github",
