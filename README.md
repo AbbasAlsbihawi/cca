@@ -71,7 +71,7 @@ Then open a new PowerShell window. If PowerShell blocks your profile script, run
 
 ### Desktop app (optional)
 
-Download the CCA desktop app from [GitHub Releases](https://github.com/AbbasAlsbihawi/cca/releases/latest): `CCA-<version>-arm64-mac.dmg` (Apple silicon), `CCA-<version>-x64-mac.dmg` (Intel Mac) or `CCA-Setup-<version>.exe` (Windows x64). On macOS, install the CLI first. The builds are not signed with a paid developer certificate, so the first launch needs one extra step; see [docs/desktop.md](docs/desktop.md#install).
+Download the CCA desktop app from [GitHub Releases](https://github.com/AbbasAlsbihawi/cca/releases/latest): `CCA-<version>-arm64-mac.dmg` (Apple silicon), `CCA-<version>-x64-mac.dmg` (Intel Mac) or `CCA-Setup-<version>.exe` (Windows x64). On macOS, install the CLI first. The builds are not signed with a paid developer certificate, so the first launch needs one extra step; see [First launch](docs/desktop.md#first-launch).
 
 Updating, uninstalling and removing data: [docs/installation.md](docs/installation.md).
 
@@ -211,7 +211,7 @@ Architecture and file layout: [docs/architecture.md](docs/architecture.md). Back
 - **Logins stay with Claude Code.** Each account's login is stored by Claude Code for that configuration folder; on macOS each account gets its own keychain entry. CCA reads only the email, organization and account ID that Claude Code saves, and never copies login tokens into backups.
 - **Shared settings apply to every account.** Hooks, permissions and environment variables in `settings.json`, plus `CLAUDE.md`, skills and plugins, reach every account. MCP server definitions, including any keys written in them, are copied from the default account into new accounts.
 - **Not a security boundary.** All accounts run as your operating system user, and any program running as you can read every account's folder and backups. CCA keeps accounts organized; it does not isolate them from each other.
-- **Unsigned desktop builds.** Your operating system warns on first launch. Build from source if you prefer.
+- **Unsigned desktop builds.** Your operating system warns on first launch ([how to open it](docs/desktop.md#first-launch)). Build from source if you prefer.
 - **Use your own accounts.** Follow Anthropic's terms and your organization's policies. CCA is not a way to get around usage limits.
 
 More detail: [docs/privacy-security.md](docs/privacy-security.md). Security policy: [SECURITY.md](SECURITY.md).

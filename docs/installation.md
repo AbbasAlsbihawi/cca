@@ -152,4 +152,4 @@ The desktop app is optional. Download it from [GitHub Releases](https://github.c
 
 Releases before 0.2.0 called the app "Claude Accounts" and named their files `ClaudeAccounts-…`. An older copy updates itself to CCA. On a Mac it keeps the folder name `Claude Accounts.app`, and on Windows the program file stays `Claude Accounts.exe` for now. Your accounts and settings in `~/.claude-accounts` are not affected.
 
-The builds are not signed with a paid developer certificate. First-launch steps, updates and limitations: [desktop.md](desktop.md#install).
+The builds are not signed with a paid developer certificate, so macOS and Windows warn the first time. Steps: [First launch](desktop.md#first-launch). How updates install: [Updates](desktop.md#updates).

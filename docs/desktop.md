@@ -104,14 +104,33 @@ Download it from [GitHub Releases](https://github.com/AbbasAlsbihawi/cca/release
 | macOS, Intel | `CCA-<version>-x64-mac.dmg` |
 | Windows, x64 | `CCA-Setup-<version>.exe` |
 
-Releases before 0.2.0 called the app "Claude Accounts" and named their files `ClaudeAccounts-…`. An older copy updates itself to CCA. On a Mac it keeps the folder name `Claude Accounts.app`, and on Windows the program file stays `Claude Accounts.exe` for now. Your accounts and settings in `~/.claude-accounts` are not affected.
+Releases before 0.2.0 called the app "Claude Accounts" and named their files `ClaudeAccounts-…`. An older copy updates itself to CCA. On a Mac it keeps the folder name `Claude Accounts.app`, and on Windows the program file stays `Claude Accounts.exe` for now. On Windows the "Claude Accounts" shortcuts become one "CCA" shortcut each. Your accounts and settings in `~/.claude-accounts` are not affected.
 
-Neither build is signed with a paid developer certificate, so the first launch is blocked:
-
-- **macOS:** open System Settings → Privacy & Security and choose *Open Anyway*.
-- **Windows:** on the SmartScreen prompt, choose *More info* → *Run anyway*.
+Neither build is signed with a paid developer certificate, so macOS and Windows warn the first time you open it. The steps are under [First launch](#first-launch).
 
 On macOS, install the CLI with `./install.sh` first. On Windows, the app puts its own copy of `cca.ps1` in `~\.claude-accounts` when none is there; run `.\install.ps1` as well if you want the `cca` command in PowerShell.
+
+### First launch
+
+Download CCA only from the project's [GitHub Releases](https://github.com/AbbasAlsbihawi/cca/releases/latest) page. The warnings below appear because the builds are not signed. Allowing the app is a security exception that you approve yourself; it does not mean Apple or Microsoft checked it.
+
+**macOS**
+
+1. Open the `.dmg` and drag **CCA** into **Applications** in Finder. Always start it from Applications: a copy that runs from the disk image, or from a folder it cannot write to, cannot update itself.
+2. Open CCA. macOS says it cannot verify the app and does not open it. Close the warning with **Done**.
+3. Open **System Settings → Privacy & Security**, scroll down to **Security**, and click **Open Anyway** next to the line about CCA. Apple shows this button for about an hour after the blocked attempt; if it is gone, open CCA again first.
+4. Enter your login password. CCA opens.
+
+You do this once. Later launches open normally, and so do updates that CCA installs itself.
+
+**Windows**
+
+1. Run `CCA-Setup-<version>.exe`. Microsoft Defender SmartScreen usually says "Windows protected your PC" and shows *Unknown publisher*. Click **More info**, then **Run anyway**. Whether SmartScreen appears depends on your Windows settings and on the file's reputation, so you may not see it.
+2. On **Choose Installation Options**, keep **Only for me** (the default). It installs in your user folder and normally does not need administrator approval.
+   **Anyone who uses this computer** installs in `C:\Program Files`. Windows then asks for administrator approval (a UAC prompt) when you install, and again for every update.
+3. Click **Finish** with **Run CCA** checked.
+
+Installing over an older "Claude Accounts" works the same way: the installer finds the existing copy and upgrades it in place.
 
 ### What it does
 
@@ -142,7 +161,12 @@ Closing the window keeps the app running in the menu bar (macOS) or the tray (Wi
 The app checks GitHub Releases for a newer version about 15 seconds after it starts, and then every 4 hours. **Check Now** on the General page, or *Check for Updates…* in the app menu, checks right away.
 
 - **macOS:** the app downloads the release zip for its architecture and replaces its own bundle. When the new release uses the same Electron version, it downloads a small update-only zip (about 1 MB) instead of the full app. A cut-off download picks up where it stopped, up to five tries.
-- **Windows:** the app uses electron-updater. A downloaded update can install now or when you quit.
+  When the update is ready, CCA asks: **Install and restart** quits CCA, replaces it and opens it again; after **Later**, CCA asks again the next time it starts, or when you click **Check Now**. An upgraded copy keeps the folder name `Claude Accounts.app`.
+  If CCA says it is running from a disk image, or that it cannot update itself in a folder that is not writable, quit it, drag it into Applications with Finder, open it from there, and click **Check Now**.
+- **Windows:** the app uses electron-updater. When an update has downloaded, CCA asks:
+  - **Restart now** closes CCA and runs the installer. It shows a progress page and a Finish page; click **Finish** with **Run CCA** checked to start the new version.
+  - **Later** installs the update silently the next time you quit CCA. CCA does not start again by itself; open it from the Start menu.
+  - An update keeps the install type you chose (only for you, or everyone). If CCA is installed for everyone, Windows asks for administrator approval on each update. If nobody approves it, the update is skipped and the current version keeps working.
 
 A check that fails because of the connection runs again 10 minutes later.
 
@@ -160,4 +184,4 @@ The app runs the `cca` CLI for every action, so the terminal and the app always 
 
 - Depends on undocumented Claude desktop app behaviour; a Claude app update can break it.
 - First sign-in of each copy needs the other copies closed (the `claude://` link).
-- The desktop builds are unsigned, so the operating system warns on first launch.
+- The desktop builds are unsigned, so the operating system warns on first launch ([steps](#first-launch)).

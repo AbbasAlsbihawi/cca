@@ -80,10 +80,19 @@ Quit the copy before restoring, then open it again. A session whose transcript i
 ## Desktop app
 
 **macOS blocks the CCA desktop app on first launch**
-Open System Settings → Privacy & Security and choose *Open Anyway*. The app is not signed with a paid developer certificate.
+The app is not signed with a paid developer certificate. Close the warning with *Done*, then open System Settings → Privacy & Security, scroll to Security and click *Open Anyway*, and enter your login password. The button stays for about an hour after the blocked attempt. Full steps: [First launch](desktop.md#first-launch).
 
 **Windows SmartScreen blocks the installer**
-Choose *More info* → *Run anyway*.
+Click *More info* → *Run anyway*. On the next page keep *Only for me* unless every user of the PC needs CCA. Full steps: [First launch](desktop.md#first-launch).
+
+**The update says CCA is running from a disk image, or cannot update itself in a folder (macOS)**
+CCA can only replace itself in a folder it can write to. Quit it, drag CCA into Applications with Finder, open it from there and click *Check Now*.
+
+**Windows asks for administrator approval on every CCA update**
+CCA is installed for everyone (in `C:\Program Files`), so each update needs that approval. To stop it, uninstall CCA and install it again with *Only for me*. Uninstalling keeps your accounts and settings.
+
+**After choosing Later, the update installed when I quit, and CCA did not start again (Windows)**
+That is expected. Open CCA from the Start menu; it is the new version.
 
 **A command fails in the app**
 A banner shows the error. Use *Show Activity* to see every command the app ran, with its output, and try the same command in a terminal.
