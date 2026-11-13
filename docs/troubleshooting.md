@@ -20,8 +20,8 @@ On macOS, open terminals load the new version on their next `cca` command. If yo
 
 ## Accounts
 
-**`cca list` shows "not logged in" for every account (macOS)**
-CCA reads emails with jq. Install it with `brew install jq`.
+**`cca list` shows "login unknown (install jq)" (macOS)**
+Without jq, CCA reads emails with a simpler pattern, and this account's file did not fit it. Install jq with `brew install jq`.
 
 **The terminal uses the wrong account**
 Run `cca` to see the reason: `set in this terminal` (undo with `cca use -`), `folder …` (a binding; see `cca unbind`), or `default`. If the account is right but its login is wrong, run `cca login <name>`.
@@ -60,7 +60,7 @@ Set `CCA_CLAUDE_EXE` to the full path of the Claude app's `Claude.exe`.
 **"cca chrome needs jq"**
 Install jq: `brew install jq`.
 
-**The Claude Accounts app does not list a new Chrome profile**
+**The CCA desktop app does not list a new Chrome profile**
 macOS does not let the app read Chrome's profile list. Run `cca chrome` once in Terminal; the app then uses the list CCA saved.
 
 **"the Chrome profile '…' linked to '…' is gone"**
@@ -79,11 +79,20 @@ Quit the copy before restoring, then open it again. A session whose transcript i
 
 ## Desktop app
 
-**macOS blocks the Claude Accounts app on first launch**
-Open System Settings → Privacy & Security and choose *Open Anyway*. The app is not signed with a paid developer certificate.
+**macOS blocks the CCA desktop app on first launch**
+The app is not signed with a paid developer certificate. Close the warning with *Done*, then open System Settings → Privacy & Security, scroll to Security and click *Open Anyway*, and enter your login password. The button stays for about an hour after the blocked attempt. Full steps: [First launch](desktop.md#first-launch).
 
 **Windows SmartScreen blocks the installer**
-Choose *More info* → *Run anyway*.
+Click *More info* → *Run anyway*. On the next page keep *Only for me* unless every user of the PC needs CCA. Full steps: [First launch](desktop.md#first-launch).
+
+**The update says CCA is running from a disk image, or cannot update itself in a folder (macOS)**
+CCA can only replace itself in a folder it can write to. Quit it, drag CCA into Applications with Finder, open it from there and click *Check Now*.
+
+**Windows asks for administrator approval on every CCA update**
+CCA is installed for everyone (in `C:\Program Files`), so each update needs that approval. To stop it, uninstall CCA and install it again with *Only for me*. Uninstalling keeps your accounts and settings.
+
+**After choosing Later, the update installed when I quit, and CCA did not start again (Windows)**
+That is expected. Open CCA from the Start menu; it is the new version.
 
 **A command fails in the app**
 A banner shows the error. Use *Show Activity* to see every command the app ran, with its output, and try the same command in a terminal.
@@ -91,4 +100,4 @@ A banner shows the error. Use *Show Activity* to see every command the app ran, 
 ## Uninstalling
 
 **Errors keep appearing in `~/.claude-accounts/autoupdate.log` after uninstalling (macOS)**
-`uninstall.sh` does not remove the autoupdate job. Reinstall with `./install.sh`, run `cca autoupdate off`, then uninstall again.
+`uninstall.sh` from CCA 0.1.12 or older left the autoupdate job behind. Reinstall with `./install.sh`, run `cca autoupdate off`, then uninstall again.

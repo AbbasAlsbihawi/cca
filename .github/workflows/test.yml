@@ -1,11 +1,15 @@
 name: test
 on: [push, pull_request]
+# Tests only read the repository.
+permissions:
+  contents: read
 jobs:
   test:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - run: zsh -n cca.zsh
+      - run: sh -n install.sh && sh -n uninstall.sh
       - run: zsh tests/run.sh
       # GitHub dot-sources the step body, so a called script's `exit` lands in
       # $LASTEXITCODE rather than failing the step: pass it on, or a parse error
@@ -18,11 +22,24 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      # The installer test reads electron-builder's NSIS template from
+      # desktop/node_modules. --ignore-scripts skips install scripts, so
+      # Electron's own binary is not downloaded.
+      - name: Install the desktop app's packages (for the installer template test)
+        working-directory: desktop
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Syntax-check the desktop app
         run: |
-          for f in $(find desktop/main desktop/renderer -name '*.js') desktop/preload.js; do
+          for f in $(find desktop/main desktop/renderer desktop/scripts -name '*.js') desktop/preload.js; do
             node --check "$f"
           done
+      # cca.zsh and cca.ps1 carry the version from desktop/package.json.
+      - name: Check the CLI versions match desktop/package.json
+        run: node desktop/scripts/sync-version.js --check
+      - name: Unit tests for the desktop app (updater release file choice, userData folder, installer update mode)
+        run: node --test desktop/test/updater-assets.test.js desktop/test/userdata-path.test.js desktop/test/nsis-update-mode.test.js
 
   windows-powershell:
     runs-on: windows-latest

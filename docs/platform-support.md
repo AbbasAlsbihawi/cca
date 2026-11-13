@@ -7,11 +7,11 @@
 | Area | macOS | Windows |
 |---|---|---|
 | CLI: `add`, `login`, `use`, `bind`, `unbind`, `run`, `list`, `remove` | Supported | Supported |
-| Backup and restore | Supported | Supported, with fewer restore options |
+| Backup and restore | Supported | Supported |
 | Daily autobackup | Supported (launchd) | Supported (Task Scheduler) |
 | Claude app copy per account (`cca app`, `cca open`) | Supported | Supported |
-| Claude Accounts desktop app | Supported (Apple silicon and Intel) | Supported (x64) |
-| Claude Accounts self-update | Supported | Supported |
+| CCA desktop app | Supported (Apple silicon and Intel) | Supported (x64) |
+| CCA desktop app self-update | Supported | Supported |
 | Claude in Chrome per account (`cca chrome`) | Supported | Not available |
 | Restart after Claude app updates (`cca update`, `cca autoupdate`) | Supported | Not available |
 | `cca import` (old name of `restore`) | Supported | Not available |
@@ -45,12 +45,10 @@ Real-install use on Windows: the Windows port itself ([#1](https://github.com/Ab
 | Finding the Claude desktop app | `/Applications/Claude.app` | usual install folders under `%LOCALAPPDATA%` or an installed app package; `CCA_CLAUDE_EXE` overrides |
 | Removed accounts go to | the Trash | the Recycle Bin |
 | Backups | APFS clones | plain copies |
-| `cca restore` options | `[snapshot]`, `--dry-run`, `--account` | `[snapshot]` only |
-| `cca list` sign-in check | reads `.claude.json` (needs jq) | reads `.claude.json` and asks `claude auth status` |
-| Claude Accounts app and the CLI | needs `install.sh` first | carries its own `cca.ps1` |
+| `cca list` sign-in check | reads `.claude.json` (with jq, or a simpler pattern without it) | reads `.claude.json` and asks `claude auth status` |
+| CCA desktop app and the CLI | needs `install.sh` first | carries its own `cca.ps1` |
 
 ## Known gaps
 
-- On Windows, the Claude Accounts app's *New Terminal* sets an environment variable that `cca.ps1` does not read, so the new window may not use the chosen account.
 - Linux is not supported: the script relies on macOS paths and tools.
 - The desktop features depend on undocumented Claude desktop app behaviour.

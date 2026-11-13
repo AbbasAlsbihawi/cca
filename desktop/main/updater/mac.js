@@ -15,6 +15,7 @@ const https = require('https');
 const os = require('os');
 const path = require('path');
 const { pipeline } = require('stream/promises');
+const assets = require('./assets');
 
 const RELEASE_URL = 'https://api.github.com/repos/AbbasAlsbihawi/cca/releases/latest';
 const NET_TIMEOUT_MS = 20 * 1000;
@@ -36,7 +37,7 @@ function userAgent() {
   let v = '0.0.0';
   try { v = app.getVersion(); } catch (e) { /* keep the placeholder */ }
   // GitHub rejects API requests without a User-Agent.
-  return `ClaudeAccounts/${v} (+https://github.com/AbbasAlsbihawi/cca)`;
+  return `CCA/${v} (+https://github.com/AbbasAlsbihawi/cca)`;
 }
 
 // --- network ---------------------------------------------------------------
@@ -94,33 +95,17 @@ function isNewer(remote, local) {
   return false;
 }
 
-function releaseAssets(release) {
-  return (Array.isArray(release.assets) ? release.assets : [])
-    .filter((a) => a && typeof a.name === 'string' && a.browser_download_url);
-}
-
 // Keyed on the running architecture: installing an x64 build on arm64 (or the
 // reverse) produces an app that cannot launch, so no match means no update.
 function pickAsset(release, version) {
-  const arch = process.arch;
-  if (arch !== 'arm64' && arch !== 'x64') return null;
-  const assets = releaseAssets(release);
-  const exact = `claudeaccounts-${version}-${arch}-mac.zip`;
-  const name = (a) => a.name.toLowerCase();
-  return assets.find((a) => name(a) === exact)
-    || assets.find((a) => name(a).endsWith('.zip') && name(a).includes(`-${arch}-mac`))
-    || null;
+  return assets.pickAsset(release, version, process.arch);
 }
 
 // The update-only zip (scripts/update-zip.sh) names the Electron it was built
 // with. Only an exact match with the running one is worth downloading; any other
 // release, or one published without it, goes straight to the full zip.
 function pickUpdateAsset(release, version) {
-  const arch = process.arch;
-  const electron = process.versions.electron;
-  if ((arch !== 'arm64' && arch !== 'x64') || !electron) return null;
-  const exact = `claudeaccounts-${version}-${arch}-update-electron-${electron}.zip`.toLowerCase();
-  return releaseAssets(release).find((a) => a.name.toLowerCase() === exact) || null;
+  return assets.pickUpdateAsset(release, version, process.arch, process.versions.electron);
 }
 
 // --- the installed bundle --------------------------------------------------
@@ -151,9 +136,9 @@ function swapBlocker(bundle) {
   } catch (e) {
     try { fs.unlinkSync(probe); } catch (e2) { /* never existed */ }
     if (parent.startsWith('/Volumes/')) {
-      return 'Claude Accounts is running from a disk image. Drag it into Applications, then check for updates again.';
+      return 'CCA is running from a disk image. Drag it into Applications, then check for updates again.';
     }
-    return `Claude Accounts cannot update itself in ${parent}: that location is not writable.`;
+    return `CCA cannot update itself in ${parent}: that location is not writable.`;
   }
 }
 
@@ -330,7 +315,7 @@ async function stageFromUpdateZip(asset, dest, dir, version, send) {
 // --- the swap --------------------------------------------------------------
 
 const SWAP_SCRIPT = `#!/bin/bash
-# Claude Accounts updater. Replaces the installed bundle once the old process is
+# CCA updater. Replaces the installed bundle once the old process is
 # gone. Arguments: 1 = pid to wait for, 2 = installed .app, 3 = staged .app,
 # 4 = temp directory to remove at the end. Paths arrive as arguments, never
 # pasted into this text, so no path can be mistaken for shell syntax.
@@ -469,7 +454,7 @@ async function checkForUpdates(win, send, opts = {}) {
     // Refuse before downloading anything if the swap could not succeed.
     const dest = installedBundle();
     if (!dest) {
-      send({ state: 'error', message: 'Could not find the installed Claude Accounts app bundle.' });
+      send({ state: 'error', message: 'Could not find the installed CCA app bundle.' });
       return;
     }
     const blocker = swapBlocker(dest);
@@ -515,8 +500,8 @@ async function checkForUpdates(win, send, opts = {}) {
       defaultId: 0,
       cancelId: 1,
       title: 'Update ready',
-      message: `Claude Accounts ${version} is ready to install.`,
-      detail: 'Claude Accounts will quit, replace itself and reopen. Choose Later to keep working - you will be asked again the next time the app starts.',
+      message: `CCA ${version} is ready to install.`,
+      detail: 'CCA will quit, replace itself and reopen. Choose Later to keep working - you will be asked again the next time the app starts.',
     });
     if (response !== 0) {
       deferred.add(version);

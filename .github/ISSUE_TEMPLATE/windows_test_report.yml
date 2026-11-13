@@ -30,8 +30,8 @@ body:
     id: cca_version
     attributes:
       label: CCA version
-      description: The release tag, the commit of your clone (`git rev-parse --short HEAD`), or the desktop app version from its General page.
-      placeholder: "v0.1.12"
+      description: The output of `cca --version` (or, for 0.1.12 and older, the release tag or the commit of your clone), and the desktop app version from its General page.
+      placeholder: "cca 0.1.12"
     validations:
       required: true
   - type: input
@@ -62,7 +62,7 @@ body:
         - label: cca app / cca open (Claude app copy per account, Start menu shortcut, colours)
         - label: cca backup / cca restore / cca autobackup
         - label: cca remove
-        - label: The Claude Accounts desktop app (install, account pages, General page)
+        - label: The CCA desktop app (install, account pages, General page)
         - label: The desktop app's New Terminal
         - label: The desktop app's self-update
         - label: uninstall.ps1

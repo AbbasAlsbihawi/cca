@@ -9,7 +9,7 @@ if (Test-Path -LiteralPath $cli) { . $cli }
 # only prints to stderr, and the app reads the exit code 0 and empty stdout as a
 # successful command.
 if (-not (Get-Command cca -CommandType Function -ErrorAction SilentlyContinue)) {
-    [Console]::Error.WriteLine("cca: could not load $cli. Reopen Claude Accounts to install it, or run install.ps1 from the cca repo.")
+    [Console]::Error.WriteLine("cca: could not load $cli. Reopen the CCA desktop app to install it, or run install.ps1 from the cca repo.")
     exit 1
 }
 

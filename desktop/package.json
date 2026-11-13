@@ -1,7 +1,7 @@
 {
   "name": "claude-accounts",
   "version": "0.1.12",
-  "description": "Claude Accounts: switch between Claude Code accounts from the menu bar or tray.",
+  "description": "CCA desktop app: a multi-account manager for Claude Code and the Claude desktop app.",
   "author": "Abbas Alsbihawi",
   "license": "MIT",
   "private": true,
@@ -16,7 +16,10 @@
     "dist:mac": "electron-builder --mac --publish never",
     "dist:win": "electron-builder --win --x64 --publish never",
     "dist:all": "electron-builder --mac --win --x64 --publish never",
-    "release": "sh scripts/publish.sh"
+    "release": "sh scripts/publish.sh",
+    "version": "node scripts/sync-version.js",
+    "sync:version": "node scripts/sync-version.js",
+    "check:version": "node scripts/sync-version.js --check"
   },
   "dependencies": {
     "electron-updater": "6.8.9"
@@ -28,7 +31,7 @@
   },
   "build": {
     "appId": "dev.cca.accounts",
-    "productName": "Claude Accounts",
+    "productName": "CCA",
     "directories": {
       "output": "release",
       "buildResources": "build"
@@ -52,7 +55,7 @@
       ],
       "identity": "-",
       "hardenedRuntime": false,
-      "artifactName": "ClaudeAccounts-${version}-${arch}-mac.${ext}",
+      "artifactName": "CCA-${version}-${arch}-mac.${ext}",
       "target": [
         {
           "target": "dmg",
@@ -79,6 +82,7 @@
           ]
         }
       ],
+      "executableName": "Claude Accounts",
       "signAndEditExecutable": false,
       "extraResources": [
         {
@@ -90,7 +94,8 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "artifactName": "ClaudeAccounts-Setup-${version}.exe"
+      "artifactName": "CCA-Setup-${version}.exe",
+      "include": "build/installer.nsh"
     },
     "publish": {
       "provider": "github",

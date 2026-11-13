@@ -46,5 +46,5 @@ Next steps:
   3. Run: cca help
 
 Desktop app (macOS and Windows, with automatic updates):
-  download ClaudeAccounts-Setup-<version>.exe from https://github.com/AbbasAlsbihawi/cca/releases
+  download CCA-Setup-<version>.exe from https://github.com/AbbasAlsbihawi/cca/releases
 '@

@@ -72,7 +72,7 @@ async function refresh(actions) {
 function createTray(actions) {
   const icon = trayIcon();
   tray = new Tray(icon);
-  tray.setToolTip('Claude Accounts');
+  tray.setToolTip('CCA');
   if (icon.isEmpty() && process.platform === 'darwin') tray.setTitle('cca');
   tray.setContextMenu(buildMenu(actions));
   if (process.platform !== 'darwin') tray.on('click', () => actions.showWindow());

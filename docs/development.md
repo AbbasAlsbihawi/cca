@@ -15,7 +15,7 @@ How to contribute, coding guidelines and pull request rules: [CONTRIBUTING.md](.
 | `tests/run.sh` | zsh test suite |
 | `tests/run.ps1` | PowerShell test suite (Windows only) |
 | `tests/parse-ps1.ps1` | Parse check of every `.ps1` file |
-| `desktop/` | The Claude Accounts Electron app |
+| `desktop/` | The CCA desktop app (Electron) |
 | `.github/workflows/test.yml` | CI |
 
 ## Tests
@@ -24,7 +24,7 @@ How to contribute, coding guidelines and pull request rules: [CONTRIBUTING.md](.
 zsh tests/run.sh
 ```
 
-The zsh suite runs every test in a throwaway home folder with a stub `claude`, and drops any `CCA_*` variables it inherits, so it never touches your real accounts. It stops before running anything if a path would still point outside the throwaway folder.
+The zsh suite restarts itself in a clean environment (only `PATH`, `TMPDIR` and the locale come through), runs every test in a throwaway folder inside `TMPDIR` with a stub `claude`, and puts safety stubs for `ps`, `open` and `launchctl` first on the `PATH`, so it never touches your real accounts, processes or launchd jobs. It stops before running anything if a path would still point outside the throwaway folder. The PowerShell suite drops every inherited `CCA_*` variable and `CLAUDE_CONFIG_DIR` before its first test.
 
 On Windows:
 
@@ -59,6 +59,8 @@ npm version patch --no-git-tag-version
 npm run dist:all
 npm run release
 ```
+
+`desktop/package.json` holds the one CCA version. `npm version` runs `scripts/sync-version.js` as its `version` script, which writes the same version into `cca.zsh` and `cca.ps1`, so `cca --version` always matches the release. CI runs `node desktop/scripts/sync-version.js --check` and fails if they differ; `npm run sync:version` fixes a mismatch by hand.
 
 To publish a version whose installer has not been tried on its own platform yet, add `-- --prerelease`. GitHub then marks the release as not production ready; the tag and the assets are the same.
 

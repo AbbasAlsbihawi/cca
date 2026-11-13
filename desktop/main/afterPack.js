@@ -54,14 +54,14 @@ module.exports = async function afterPack(context) {
     vi.setStringValues(
       { lang, codepage },
       {
-        ProductName: 'Claude Accounts',
-        FileDescription: 'Claude Accounts',
+        ProductName: 'CCA',
+        FileDescription: 'CCA',
         FileVersion: version,
         ProductVersion: version,
         CompanyName: 'Abbas Alsbihawi',
         LegalCopyright: 'Copyright (c) 2026 Abbas Alsbihawi',
         OriginalFilename: `${productName}.exe`,
-        InternalName: 'Claude Accounts',
+        InternalName: 'CCA',
       }
     );
     vi.outputToResourceEntries(res.entries);

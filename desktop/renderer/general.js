@@ -62,7 +62,7 @@ export function renderGeneral(root, ctx) {
   }
   const updateRow = row('Software update', null, bar, checkBtn);
   updateRow.querySelector('.k').appendChild(status);
-  page.appendChild(group('Claude Accounts', [
+  page.appendChild(group('CCA', [
     row('Version', null, value(ctx.info && ctx.info.version ? ctx.info.version : '')),
     updateRow,
   ]));

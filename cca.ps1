@@ -24,6 +24,21 @@ $script:CCA_MAIN_APP_DATA = Get-CcaEnv 'CCA_MAIN_APP_DATA' (Join-Path $env:APPDA
 $script:CCA_SHARED = @('settings.json', 'CLAUDE.md', 'skills', 'plugins', 'agents', 'commands', 'output-styles', 'keybindings.json')
 $script:CCA_SCRIPT = $MyInvocation.MyCommand.Path
 
+# The CCA version. desktop/package.json is the source: `npm version` in desktop\
+# rewrites this line (scripts/sync-version.js), and CI fails if it differs.
+$script:CCA_VERSION = '0.1.12'
+
+# The desktop app's New Terminal starts PowerShell with CCA_ACCOUNT in the
+# environment, which cca.zsh reads directly on macOS. Take it as this terminal's
+# `cca use` choice unless one is already set, then drop it from the environment:
+# the PowerShell variable stays the only copy, so `cca use -` clears it and
+# programs started from this terminal do not inherit it. A name that is not an
+# account is kept, so `claude` stops with an error instead of picking another.
+if ($env:CCA_ACCOUNT) {
+    if (-not $global:CCA_ACCOUNT) { $global:CCA_ACCOUNT = $env:CCA_ACCOUNT }
+    Remove-Item Env:\CCA_ACCOUNT -ErrorAction SilentlyContinue
+}
+
 function Write-CcaErr([string]$msg) { [Console]::Error.WriteLine("cca: $msg") }
 
 # Set by a command that failed; `cca` and `claude` turn it into $LASTEXITCODE on the
@@ -242,6 +257,7 @@ function Invoke-CcaUse($a) {
         }
         { $_ -eq '-' -or $_ -eq 'off' } {
             Remove-Variable -Name CCA_ACCOUNT -Scope Global -ErrorAction SilentlyContinue
+            Remove-Item Env:\CCA_ACCOUNT -ErrorAction SilentlyContinue
             Write-Host 'This terminal follows folder bindings again.'
         }
         default {
@@ -756,11 +772,17 @@ function Copy-CcaMissing([string]$from, [string]$to, [string]$kind, $c) {
     foreach ($f in (Get-ChildItem -LiteralPath $from -Recurse -File -Force)) {
         $rel = $f.FullName.Substring($root.Length + 1)
         $dst = Join-Path $to $rel
-        if (Test-Path -LiteralPath $dst) { continue }
-        try {
-            New-Item -ItemType Directory -Force -Path (Split-Path $dst) | Out-Null
-            Copy-Item -LiteralPath $f.FullName -Destination $dst
-        } catch { Write-CcaErr "could not copy $($f.FullName)"; $c.bad++; continue }
+        if (Test-Path -LiteralPath $dst) { $c.old++; continue }
+        if ($c.dry) {
+            # A dry run copies nothing; it remembers the new session files, so
+            # their 'deleted' marks can be counted too.
+            if ($f.Name -like 'local_*.json') { [void]$c.would.Add($dst) }
+        } else {
+            try {
+                New-Item -ItemType Directory -Force -Path (Split-Path $dst) | Out-Null
+                Copy-Item -LiteralPath $f.FullName -Destination $dst
+            } catch { Write-CcaErr "could not copy $($f.FullName)"; $c.bad++; continue }
+        }
         if ($kind -eq 'sess' -and $f.Name -like 'local_*.json') { $c.sess++ }
         if ($kind -eq 'tr' -and $rel -match '^[^\\]+\\[^\\]+\.jsonl$') { $c.tr++ }
     }
@@ -836,9 +858,23 @@ function Invoke-CcaBackup($a) {
 }
 
 function Invoke-CcaRestore($a) {
-    $name = if ($a.Count) { $a[0] } else { '' }
-    $snapname = if ($a.Count -gt 1) { $a[1] } else { '' }
-    if (-not (Test-CcaExists $name)) { Write-CcaFail ('usage: cca restore <name> [snapshot]. Accounts: ' + ((Get-CcaProfiles) -join ', ')); return }
+    $usage = 'usage: cca restore <name> [snapshot] [--dry-run] [--account <uuid>]'
+    $dry = $false
+    $acct = ''
+    $pos = @()
+    for ($i = 0; $i -lt $a.Count; $i++) {
+        $arg = [string]$a[$i]
+        if ($arg -ceq '-n' -or $arg -ceq '--dry-run') { $dry = $true }
+        elseif ($arg -ceq '--account') {
+            if ($i + 1 -ge $a.Count -or -not [string]$a[$i + 1]) { Write-CcaFail "${usage}: --account needs a value"; return }
+            $i++
+            $acct = [string]$a[$i]
+        }
+        else { $pos += $arg }
+    }
+    $name = if ($pos.Count) { $pos[0] } else { '' }
+    $snapname = if ($pos.Count -gt 1) { $pos[1] } else { '' }
+    if (-not (Test-CcaExists $name) -or $pos.Count -gt 2) { Write-CcaFail ("$usage. Accounts: " + ((Get-CcaProfiles) -join ', ')); return }
     $procId = Get-CcaAppPid $name
     if ($procId) { Write-CcaFail "the Claude app for '$name' is open (PID $procId). Quit it first."; return }
     $d = Get-CcaDataDirs $name
@@ -855,8 +891,8 @@ function Invoke-CcaRestore($a) {
     }
     $src = $null
     if ($name -cne (Get-CcaDefaultName)) {
-        $acct = Get-CcaAccountUuid $name
-        if ($acct -match '^[0-9A-Za-z-]+$') {
+        if (-not $acct) { $acct = Get-CcaAccountUuid $name }
+        if ($acct -cmatch '^[0-9A-Za-z-]+$') {
             $cand = Join-Path $script:CCA_MAIN_APP_DATA "claude-code-sessions\$acct"
             if (Test-Path -LiteralPath $cand) { $src = $cand }
         }
@@ -865,7 +901,7 @@ function Invoke-CcaRestore($a) {
         Write-CcaFail "no backup has '$name', and the main Claude app has none of its sessions. See: cca backup list"
         return
     }
-    $c = @{ sess = 0; tr = 0; bad = 0 }
+    $c = @{ sess = 0; tr = 0; bad = 0; old = 0; dry = $dry; would = New-Object System.Collections.ArrayList }
     $tomb = 0
     if ($snapname) {
         Copy-CcaMissing (Join-Path $root "$snapname\$name\projects") $d.Projects 'tr' $c
@@ -873,8 +909,10 @@ function Invoke-CcaRestore($a) {
     }
     if ($src) {
         $desk = Join-Path $script:CCA_HOME "desktop\$name"
-        New-Item -ItemType Directory -Force -Path $desk | Out-Null
-        if (-not (Test-Path -LiteralPath $desk -PathType Container)) { Write-CcaFail "could not make $desk"; return }
+        if (-not $dry) {
+            New-Item -ItemType Directory -Force -Path $desk | Out-Null
+            if (-not (Test-Path -LiteralPath $desk -PathType Container)) { Write-CcaFail "could not make $desk"; return }
+        }
         Copy-CcaMissing $src (Join-Path $d.Sessions $acct) 'sess' $c
         # The transcripts those sessions point to.
         $from = Join-Path $script:CCA_MAIN_DIR 'projects'
@@ -884,9 +922,12 @@ function Invoke-CcaRestore($a) {
             foreach ($t in (Get-ChildItem -Path (Join-Path $from "*\$id.jsonl") -ErrorAction SilentlyContinue)) {
                 $slug = $t.Directory.Name
                 $dst = Join-Path $d.Projects "$slug\$id.jsonl"
-                if (-not (Test-Path -LiteralPath $dst)) {
-                    New-Item -ItemType Directory -Force -Path (Split-Path $dst) | Out-Null
-                    Copy-Item -LiteralPath $t.FullName -Destination $dst
+                if (Test-Path -LiteralPath $dst) { $c.old++ }
+                else {
+                    if (-not $dry) {
+                        New-Item -ItemType Directory -Force -Path (Split-Path $dst) | Out-Null
+                        Copy-Item -LiteralPath $t.FullName -Destination $dst
+                    }
                     $c.tr++
                 }
                 $sub = Join-Path $t.Directory.FullName $id
@@ -895,18 +936,28 @@ function Invoke-CcaRestore($a) {
         }
     }
     # A session that was logged out of has a 'deleted' mark next to it, which hides it.
+    # (A dry run also looks at the sessions that would be copied.)
+    $sessFiles = @()
     if (Test-Path -LiteralPath $d.Sessions) {
-        foreach ($f in (Get-ChildItem -LiteralPath $d.Sessions -Recurse -File -Filter 'local_*.json' -Force)) {
-            $id = $f.BaseName.Substring('local_'.Length)
-            $mark = Join-Path $f.DirectoryName "deleted_$id"
-            if (Test-Path -LiteralPath $mark -PathType Leaf) {
-                try { Move-CcaToTrash $mark; $tomb++ } catch { $c.bad++ }
-            }
+        $sessFiles = @(Get-ChildItem -LiteralPath $d.Sessions -Recurse -File -Filter 'local_*.json' -Force | ForEach-Object { $_.FullName })
+    }
+    foreach ($p in ($sessFiles + @($c.would))) {
+        $leaf = Split-Path $p -Leaf
+        $id = $leaf.Substring('local_'.Length, $leaf.Length - 'local_'.Length - '.json'.Length)
+        $mark = Join-Path (Split-Path $p) "deleted_$id"
+        if (Test-Path -LiteralPath $mark -PathType Leaf) {
+            if ($dry) { $tomb++; continue }
+            try { Move-CcaToTrash $mark; $tomb++ } catch { $c.bad++ }
         }
     }
     $from = if ($snapname) { $snapname } else { 'the main Claude app' }
     if ($snapname -and $src) { $from += ' and the main Claude app' }
-    Write-Host "Restored '$name' from ${from}: $($c.sess) sessions, $($c.tr) transcripts, $tomb deleted marks moved to the Recycle Bin. Nothing was overwritten."
+    if ($dry) {
+        Write-Host "Would restore '$name' from ${from}: $($c.sess) sessions, $($c.tr) transcripts, $tomb deleted marks to move to the Recycle Bin. Nothing was changed."
+    } else {
+        Write-Host "Restored '$name' from ${from}: $($c.sess) sessions, $($c.tr) transcripts, $tomb deleted marks moved to the Recycle Bin. Nothing was overwritten."
+    }
+    if ($c.old) { Write-Host "Already there, left as is: $($c.old) files." }
     # cca.zsh ends _cca_restore with `(( bad == 0 ))`.
     if ($c.bad) { Set-CcaFailed }
 }
@@ -940,6 +991,11 @@ function Invoke-CcaAutobackup($a) {
     }
 }
 
+function Show-CcaVersion {
+    if ($script:CCA_VERSION -notmatch '^\d+\.\d+\.\d+') { Write-CcaFail "this copy of cca has no valid version ('$($script:CCA_VERSION)')"; return }
+    Write-Output "cca $($script:CCA_VERSION)"
+}
+
 function Show-CcaHelp {
     @'
 cca - switch Claude Code between accounts (Windows)
@@ -957,8 +1013,10 @@ cca - switch Claude Code between accounts (Windows)
   cca open <name>            open the Claude desktop app for an account (or bring it to the front)
   cca remove <name>          log out an account; move its folders and launcher to the Recycle Bin
   cca backup [--quiet|list]  save every account's conversations (keeps the newest 30)
-  cca restore <name> [snap]  bring an account's conversations back (never overwrites)
+  cca restore <name> [snap] [-n] [--account <uuid>]
+                             bring an account's conversations back (never overwrites; -n: dry run)
   cca autobackup on|off|status   a daily backup at 13:00
+  cca version                show the installed CCA version (also: cca --version)
 
 Order: cca use > folder binding > default account (~\.claude).
 Set CCA_QUIET=1 to hide the line 'claude' prints about the account.
@@ -989,6 +1047,7 @@ function cca {
         'backup'  { Invoke-CcaBackup $rest }
         'restore' { Invoke-CcaRestore $rest }
         'autobackup' { Invoke-CcaAutobackup $rest }
+        { $_ -in 'version', '--version' } { Show-CcaVersion }
         { $_ -in 'help', '-h', '--help' } { Show-CcaHelp }
         default   { Write-CcaFail "unknown command '$cmd'"; Show-CcaHelp }
     }
@@ -1025,12 +1084,13 @@ Register-ArgumentCompleter -CommandName cca -ScriptBlock {
     param($wordToComplete, $commandAst, $cursorPosition)
     $words = @($commandAst.CommandElements | ForEach-Object { $_.ToString() })
     $pos = $words.Count - $(if ($wordToComplete) { 1 } else { 0 })
-    $cmds = 'status', 'list', 'add', 'login', 'use', 'bind', 'unbind', 'run', 'app', 'open', 'remove', 'backup', 'restore', 'autobackup', 'help'
+    $cmds = 'status', 'list', 'add', 'login', 'use', 'bind', 'unbind', 'run', 'app', 'open', 'remove', 'backup', 'restore', 'autobackup', 'version', 'help'
     $pick = if ($pos -le 1) { $cmds }
         elseif ($pos -eq 2 -and $words[1] -in 'login', 'use', 'bind', 'run', 'app', 'open', 'remove', 'restore') { Get-CcaProfiles }
         elseif ($pos -eq 2 -and $words[1] -in 'list', 'ls') { '--json' }
         elseif ($pos -eq 2 -and $words[1] -eq 'backup') { 'list', '--quiet' }
         elseif ($pos -eq 2 -and $words[1] -eq 'autobackup') { 'on', 'off', 'status' }
-        elseif ($pos -eq 3 -and $words[1] -eq 'restore') { Get-CcaSnapshots }
+        elseif ($pos -eq 3 -and $words[1] -eq 'restore') { @(Get-CcaSnapshots) + '--dry-run', '--account' }
+        elseif ($pos -ge 4 -and $words[1] -eq 'restore') { '--dry-run', '--account' }
     $pick | Where-Object { $_ -like "$wordToComplete*" } | ForEach-Object { [Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_) }
 }

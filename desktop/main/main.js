@@ -7,6 +7,13 @@ const { buildAppMenu } = require('./menu');
 const { createTray } = require('./tray');
 const { startAutoUpdate } = require('./updater');
 
+// Electron names its data folder after the app name, which comes from package.json
+// "name" (productName is set only for electron-builder): every 0.1.x copy used
+// <appData>/claude-accounts. Pin that folder, before anything uses it, so a future
+// top-level productName cannot move it: an upgrade keeps what Electron stored there,
+// and an old and a new copy share one instance lock.
+app.setPath('userData', path.join(app.getPath('appData'), 'claude-accounts'));
+
 let win = null;
 let quitting = false;
 

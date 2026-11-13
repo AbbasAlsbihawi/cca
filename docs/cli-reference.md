@@ -11,6 +11,7 @@ Every command below works on macOS (`cca.zsh`) and Windows (`cca.ps1`) unless it
 - [Claude desktop app](#claude-desktop-app): `app`, `open`, `update`, `autoupdate`
 - [Claude in Chrome](#claude-in-chrome): `chrome`
 - [Backups](#backups): `backup`, `restore`, `autobackup`, `import`
+- [Version](#version): `version`
 - [Environment variables](#environment-variables)
 
 ## How `claude` picks an account
@@ -50,9 +51,9 @@ Folders:
 
 ### `cca list [--json]` (or `cca ls`)
 
-Lists the accounts with their emails. An account that is not signed in shows `not logged in`. On macOS, emails are read with jq; without jq every account shows `not logged in`. On Windows, `cca list` also asks Claude Code (`claude auth status`) whether each account is really signed in.
+Lists the accounts with their emails. An account that is not signed in shows `not logged in`. On macOS, emails are read with jq; without jq, CCA reads them with a simpler pattern, and a login it cannot read shows as `login unknown (install jq)`. On Windows, `cca list` also asks Claude Code (`claude auth status`) whether each account is really signed in.
 
-`--json` prints one JSON object for scripts and the desktop app: a `version` number, the default account name, the available icon colours, whether autobackup and autoupdate are on, the backup snapshots, the Chrome profiles (macOS) and, for each account, its name, email, organization, sign-in state, colour, launcher, linked Chrome profile, whether its Claude app copy is running, and its bound folders. The `version` field changes if the format does.
+`--json` prints one JSON object for scripts and the desktop app: a `version` number, the default account name, the available icon colours, whether autobackup and autoupdate are on, the backup snapshots, the Chrome profiles (macOS) and, for each account, its name, email, organization, sign-in state, colour, launcher, linked Chrome profile, whether its Claude app copy is running, and its bound folders. `loggedIn` is `true`, `false`, or `null` when CCA cannot tell. The `version` field changes if the format does.
 
 ### `cca add <name> [options]`
 
@@ -194,7 +195,7 @@ cca restore personal --dry-run            # show what would be copied; change no
 cca restore personal --account <uuid>     # say which Claude account its sessions belong to
 ```
 
-On Windows, `cca restore` takes only `<name>` and `[snapshot]`: there is no dry run and no `--account`.
+The options work the same on macOS and Windows and can come in any order. `--account` needs a value; a value that is not a plain account ID is ignored.
 
 ### `cca autobackup on|off|status`
 
@@ -204,13 +205,19 @@ A daily backup at 13:00. A missed run happens at the next wake (macOS) or the ne
 
 The older name of `cca restore`. On Windows it prints that it is not available; use `cca restore`.
 
+## Version
+
+### `cca version` (or `cca --version`)
+
+Prints the installed version, for example `cca 0.1.12`. It works without jq, without a network connection and outside the repository. The version comes from `desktop/package.json`; see [Development](development.md#releasing).
+
 ## Environment variables
 
 | Variable | Platform | Purpose |
 |---|---|---|
 | `CCA_QUIET` | both | Set to any value to hide the `claude account: ...` line. |
 | `CCA_BACKUP_KEEP` | both | How many snapshots to keep (default 30). |
-| `CCA_ACCOUNT` | macOS | The account `cca use` sets. When it is exported before zsh starts, that shell uses the account; the desktop app's *New Terminal* works this way. On Windows, `cca use` keeps the account in a PowerShell variable, and an environment variable with this name is not read. |
+| `CCA_ACCOUNT` | both | The account `cca use` sets. When it is in the environment before the shell starts, that shell uses the account, unless `cca use` picks another; the desktop app's *New Terminal* works this way. On Windows, `cca.ps1` takes it over when it loads and removes it from the environment. A name that is not an account makes `claude` stop with an error. |
 | `CCA_CLAUDE_EXE` | Windows | Path to the Claude desktop app's `Claude.exe`, when it is not in a usual install folder. |
 | `CCA_HOME` | both | Where CCA keeps its data (default `~/.claude-accounts`). |
 

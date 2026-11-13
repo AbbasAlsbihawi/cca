@@ -53,9 +53,9 @@ function wire(win, send) {
         defaultId: 0,
         cancelId: 1,
         title: 'Update ready',
-        message: version ? `Claude Accounts ${version} is ready to install.` : 'An update is ready to install.',
+        message: version ? `CCA ${version} is ready to install.` : 'An update is ready to install.',
         // Say what "Later" does, so the install on quit is not a surprise.
-        detail: 'Restart now to use it right away, or choose Later - it will be installed automatically the next time you quit Claude Accounts.',
+        detail: 'Restart now to use it right away, or choose Later - it will be installed automatically the next time you quit CCA.',
       });
       if (response === 0) setImmediate(() => autoUpdater.quitAndInstall());
     } catch (err) {

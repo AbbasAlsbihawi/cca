@@ -39,7 +39,7 @@ CCA removes that step:
 | Backup and restore | `cca backup` takes a snapshot of every account's local Claude Code conversations. `cca restore` brings back what is missing and never overwrites a file. Optional daily backup. | macOS, Windows |
 | Claude in Chrome per account | `cca chrome` links each account to its own Chrome profile. | macOS |
 | Restart after Claude app updates | `cca update` and `cca autoupdate` restart every open copy of the Claude desktop app on the newly installed version. | macOS |
-| Claude Accounts app | A desktop app that does all of the above with buttons, plus a menu bar or tray menu. It updates itself. | macOS, Windows |
+| CCA desktop app | A desktop app that does all of the above with buttons, plus a menu bar or tray menu. It updates itself. | macOS, Windows |
 
 Shared versus separate: settings, `CLAUDE.md`, skills and plugins are **shared** by every account. Logins, chat history, memory, MCP sign-ins and MCP servers added with `claude mcp add` stay **separate** per account. See [How it works](#how-it-works).
 
@@ -47,7 +47,7 @@ Shared versus separate: settings, `CLAUDE.md`, skills and plugins are **shared**
 
 ### macOS
 
-Requirements: macOS with zsh (the default shell), [Claude Code](https://code.claude.com/docs/en/overview) (`claude`), and [jq](https://jqlang.org) (recommended: `brew install jq`). Without jq, CCA cannot show account emails, copy MCP servers into new accounts, or link Chrome profiles.
+Requirements: macOS with zsh (the default shell), [Claude Code](https://code.claude.com/docs/en/overview) (`claude`), and [jq](https://jqlang.org) (recommended: `brew install jq`). Without jq, CCA cannot copy MCP servers into new accounts or link Chrome profiles, and may show a login as unknown.
 
 ```sh
 git clone https://github.com/AbbasAlsbihawi/cca.git
@@ -71,7 +71,7 @@ Then open a new PowerShell window. If PowerShell blocks your profile script, run
 
 ### Desktop app (optional)
 
-Download the Claude Accounts app from [GitHub Releases](https://github.com/AbbasAlsbihawi/cca/releases/latest): `ClaudeAccounts-<version>-arm64-mac.dmg` (Apple silicon), `ClaudeAccounts-<version>-x64-mac.dmg` (Intel Mac) or `ClaudeAccounts-Setup-<version>.exe` (Windows x64). On macOS, install the CLI first. The builds are not signed with a paid developer certificate, so the first launch needs one extra step; see [docs/desktop.md](docs/desktop.md#install).
+Download the CCA desktop app from [GitHub Releases](https://github.com/AbbasAlsbihawi/cca/releases/latest): `CCA-<version>-arm64-mac.dmg` (Apple silicon), `CCA-<version>-x64-mac.dmg` (Intel Mac) or `CCA-Setup-<version>.exe` (Windows x64). On macOS, install the CLI first. The builds are not signed with a paid developer certificate, so the first launch needs one extra step; see [First launch](docs/desktop.md#first-launch).
 
 Updating, uninstalling and removing data: [docs/installation.md](docs/installation.md).
 
@@ -169,10 +169,11 @@ Every account shares your default account's `settings.json`, `CLAUDE.md`, skills
 | `cca chrome [<name> [<profile>\|--unlink]]` | List Chrome profiles, link one to an account, or open Chrome in it (macOS). |
 | `cca remove <name>` | Log an account out and move its folders and launcher to the Trash (Recycle Bin on Windows). |
 | `cca backup [--quiet\|list]` | Save every account's conversations; `list` shows the snapshots. |
-| `cca restore <name> [snapshot] [-n] [--account <uuid>]` | Bring an account's conversations back, never overwriting anything (`-n` and `--account`: macOS only). |
+| `cca restore <name> [snapshot] [-n] [--account <uuid>]` | Bring an account's conversations back, never overwriting anything (`-n`: dry run). |
 | `cca autobackup on\|off\|status` | A daily backup at 13:00. |
 | `cca update` | Quit and reopen every open Claude app copy so each runs the installed version (macOS). |
 | `cca autoupdate on\|off\|status` | Do that automatically after the Claude app updates (macOS). |
+| `cca version` | Show the installed CCA version (also `cca --version`). |
 | `cca help` | Show the built-in help. |
 
 Which account `claude` uses, first match wins:
@@ -188,11 +189,11 @@ Inside a Claude Code session, `claude` keeps the account of that session. Full r
 CCA works with the Claude desktop app in two ways:
 
 - **A Claude app copy per account.** `cca app personal` makes `~/Applications/Claude Personal.app` (a Start menu shortcut on Windows). It opens the Claude desktop app with its own data folder, `~/.claude-accounts/desktop/personal`, so every account stays signed in to the app at once. The first sign-in needs all other Claude windows closed, because the sign-in link returns through `claude://`.
-- **The Claude Accounts app.** A window laid out like macOS System Settings, with your accounts in a sidebar. For each account you can open its Claude app, pick an icon colour, open a terminal on it, log in again, sign in to MCP servers, pick a Chrome profile, bind folders, restore conversations or remove it. The General page handles backups, autobackup and updates. A menu bar (macOS) or tray (Windows) menu stays available when the window is closed.
+- **The CCA desktop app.** A window laid out like macOS System Settings, with your accounts in a sidebar. For each account you can open its Claude app, pick an icon colour, open a terminal on it, log in again, sign in to MCP servers, pick a Chrome profile, bind folders, restore conversations or remove it. The General page handles backups, autobackup and updates. A menu bar (macOS) or tray (Windows) menu stays available when the window is closed.
 
 The app calls the `cca` CLI for everything, so the terminal and the app always agree. It relies on undocumented Claude desktop app behaviour and may break after a Claude app update. Details, first sign-in steps and limitations: [docs/desktop.md](docs/desktop.md).
 
-<!-- Phase 4: add a real screenshot of the Claude Accounts app here (assets/screenshots/desktop.png). -->
+<!-- Phase 4: add a real screenshot of the CCA desktop app here (assets/screenshots/desktop.png). -->
 
 ## How it works
 
@@ -210,7 +211,7 @@ Architecture and file layout: [docs/architecture.md](docs/architecture.md). Back
 - **Logins stay with Claude Code.** Each account's login is stored by Claude Code for that configuration folder; on macOS each account gets its own keychain entry. CCA reads only the email, organization and account ID that Claude Code saves, and never copies login tokens into backups.
 - **Shared settings apply to every account.** Hooks, permissions and environment variables in `settings.json`, plus `CLAUDE.md`, skills and plugins, reach every account. MCP server definitions, including any keys written in them, are copied from the default account into new accounts.
 - **Not a security boundary.** All accounts run as your operating system user, and any program running as you can read every account's folder and backups. CCA keeps accounts organized; it does not isolate them from each other.
-- **Unsigned desktop builds.** Your operating system warns on first launch. Build from source if you prefer.
+- **Unsigned desktop builds.** Your operating system warns on first launch ([how to open it](docs/desktop.md#first-launch)). Build from source if you prefer.
 - **Use your own accounts.** Follow Anthropic's terms and your organization's policies. CCA is not a way to get around usage limits.
 
 More detail: [docs/privacy-security.md](docs/privacy-security.md). Security policy: [SECURITY.md](SECURITY.md).
@@ -220,10 +221,10 @@ More detail: [docs/privacy-security.md](docs/privacy-security.md). Security poli
 | Area | macOS | Windows |
 |---|---|---|
 | CLI: accounts, `use`, `bind`, `run`, `list`, `remove` | Supported | Supported |
-| Backup, restore, daily autobackup | Supported | Supported; `restore` has no `--dry-run` or `--account` |
+| Backup, restore, daily autobackup | Supported | Supported |
 | Claude app copy per account (`cca app`, `cca open`) | Supported | Supported |
-| Claude Accounts app | Supported (Apple silicon and Intel) | Supported (x64) |
-| Claude Accounts app self-update | Supported | Supported |
+| CCA desktop app | Supported (Apple silicon and Intel) | Supported (x64) |
+| CCA desktop app self-update | Supported | Supported |
 | Claude in Chrome per account (`cca chrome`) | Supported | Not available |
 | Restart after Claude app updates (`cca update`, `cca autoupdate`) | Supported | Not available |
 | Linux | Not supported | — |
@@ -233,7 +234,7 @@ Evidence behind each status and the full list of differences: [docs/platform-sup
 ## Troubleshooting
 
 - **`command not found: cca`**: open a new terminal, or run `source ~/.zshrc`.
-- **`cca list` says "not logged in" for every account (macOS)**: install jq (`brew install jq`).
+- **`cca list` says "login unknown (install jq)" (macOS)**: install jq (`brew install jq`).
 - **The terminal uses the wrong account**: run `cca` to see why, then `cca login <name>` if the login itself is wrong.
 - **A desktop copy shows the wrong account**: quit every Claude copy, open only that one, log out, then log in.
 - **Signing in picks the wrong Google account**: type the email and use "Continue with email" instead of "Continue with Google".
@@ -246,7 +247,7 @@ More: [docs/troubleshooting.md](docs/troubleshooting.md).
 |---|---|
 | [Installation](docs/installation.md) | Requirements, install, update and uninstall on macOS and Windows, the desktop app |
 | [CLI reference](docs/cli-reference.md) | Every command, option and environment variable |
-| [Desktop](docs/desktop.md) | Claude app copies per account, the Claude Accounts app, Claude in Chrome, Claude app updates |
+| [Desktop](docs/desktop.md) | Claude app copies per account, the CCA desktop app, Claude in Chrome, Claude app updates |
 | [Architecture](docs/architecture.md) | How accounts, links, bindings and desktop copies work; file layout |
 | [Backup and restore](docs/backup-restore.md) | Snapshots, restore, autobackup |
 | [Privacy and security](docs/privacy-security.md) | What stays local, what is shared, what backups hold |

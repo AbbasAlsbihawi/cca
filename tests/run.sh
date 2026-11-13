@@ -2,14 +2,28 @@
 # Test suite for cca.zsh. Runs everything in a throwaway HOME; touches nothing real.
 # Usage: zsh tests/run.sh
 
+# Run in a clean environment: only PATH, TMPDIR and the locale come through, so
+# nothing from the real session (CCA_*, CLAUDE_CONFIG_DIR, HOME, tokens) can
+# reach cca. HOME is pointed at a throwaway folder below.
+if [[ -z $CCA_TESTS_CLEAN ]]; then
+  exec env -i CCA_TESTS_CLEAN=1 PATH="$PATH" TMPDIR="${TMPDIR:-/tmp}" \
+    ${LANG:+LANG="$LANG"} ${LC_ALL:+LC_ALL="$LC_ALL"} HOME=/var/empty \
+    zsh -f "${${(%):-%x}:A}" "$@"
+fi
+
 REPO=${${(%):-%x}:A:h:h}
 # cca keeps any CCA_* it inherits, and Claude Code exports CCA_HOME. Drop them
 # all, so cca falls back to the throwaway HOME below and not the real accounts.
 unset -m 'CCA_*'
 unset CLAUDE_CONFIG_DIR
-T=$(mktemp -d) || exit 1
+# Inside TMPDIR (macOS mktemp -d alone ignores it), so every file a test writes
+# stays in the temporary folder the caller chose.
+T=$(mktemp -d "${${TMPDIR:-/tmp}%/}/cca-tests.XXXXXX") || exit 1
 T=${T:A}
+[[ $T == /?* && -d $T ]] || exit 1
 trap 'rm -rf "$T"' EXIT INT TERM
+export HOME=$T/outer
+mkdir -p $HOME
 H=$T/home
 A=$H/.claude-accounts
 integer pass=0 fail=0
@@ -35,20 +49,32 @@ mk_home() {
   print -r -- '#!/bin/sh
 echo "CFG=${CLAUDE_CONFIG_DIR-UNSET} ARGS=$*"' > $T/bin/claude
   chmod +x $T/bin/claude
+  # Safety nets: a test that forgets a stub still cannot see real Claude
+  # processes, open a real app or change a real launchd job.
+  print -r -- '#!/bin/sh' > $T/bin/ps
+  print -r -- "#!/bin/sh
+echo \"open \$*\" >> '$T/open.log'" > $T/bin/open
+  print -r -- "#!/bin/sh
+echo \"launchctl \$*\" >> '$T/launchctl-path.log'" > $T/bin/launchctl
+  chmod +x $T/bin/ps $T/bin/open $T/bin/launchctl
 }
 prof() { mkdir -p $A/profiles/$1 }
 
 # run '<zsh code>' : runs it after sourcing cca.zsh, outside Claude Code, in the fake HOME.
+# Stubs every test starts with; a test can define its own after them.
+SAFE='_cca_lsregister() { print -r -- "LSREGISTER $*" >> $T/lsregister.log }
+_cca_front() { print -r -- "FRONT $1" >> $T/front.log }
+_cca_quit_pid() { print -r -- "QUIT $1" >> $T/quit.log }'
 run() {
-  env -u CLAUDECODE HOME=$H PATH=$T/bin:$PATH REPO=$REPO T=$T zsh -f -c 'source "$REPO/cca.zsh"; '"$1" 2>&1
+  env -u CLAUDECODE HOME=$H CCA_TRASH=$T/trash PATH=$T/bin:$PATH REPO=$REPO T=$T zsh -f -c 'source "$REPO/cca.zsh"; '"$SAFE"$'\n'"$1" 2>&1
 }
 
 mode() { stat -f %Lp $1 }
 
 # Stop before any test if cca would still reach a folder outside the throwaway HOME.
 mk_home
-for out in "${(@f)$(run 'print -rl -- $CCA_HOME $CCA_MAIN_DIR $CCA_MAIN_JSON $CCA_MAIN_APP_DATA $CCA_LAUNCH_AGENTS $CCA_CHROME_DATA')}"; do
-  [[ $out == $H/* ]] || { print -ru2 -- "tests: cca would use $out, outside the throwaway HOME; stopping"; exit 1 }
+for out in "${(@f)$(run 'print -rl -- $CCA_HOME $CCA_MAIN_DIR $CCA_MAIN_JSON $CCA_MAIN_APP_DATA $CCA_LAUNCH_AGENTS $CCA_CHROME_DATA $CCA_TRASH')}"; do
+  [[ $out == $H/* || $out == $T/trash ]] || { print -ru2 -- "tests: cca would use $out, outside the throwaway HOME; stopping"; exit 1 }
 done
 
 # 1. syntax and sourcing
@@ -192,6 +218,7 @@ else
   out=$(run 'export CCA_CLAUDE_APP=$T/FakeClaude.app; cca app personal'); rc=$?
   yes "app personal exits 0" $rc
   [[ -d $D ]] && ok "launcher app exists" || bad "launcher app exists" "$D" "missing: $out"
+  has "app registers the launcher (LaunchServices stubbed)" "LSREGISTER -f $D" "$(<$T/lsregister.log 2>&1)"
   eq "marker names the account" personal "$(cat $D/Contents/Resources/cca-account 2>&1)"
   cmp -s $F/Contents/Resources/AppIcon.icns $D/Contents/Resources/applet.icns && ok "applet.icns is the Claude icon" || bad "applet.icns is the Claude icon" identical differs
   cv=$(codesign --verify $D 2>&1); yes "codesign --verify passes ($cv)" $?
@@ -508,7 +535,7 @@ jq -n --arg e 'q"u\ote@x.com' '{oauthAccount:{emailAddress:$e,organizationName:"
 run 'cca bind personal "$ODD"; cca bind personal $T/work/plain' >/dev/null
 mkdir -p $A/backups/2026-01-01_000000 $A/backups/2026-03-05_101010 $A/backups/2026-03-05_101010-2
 JSTUBS='ps() { print -r -- " 111 /Applications/Claude.app/Contents/MacOS/Claude"; print -r -- " 222 /Applications/Claude.app/Contents/MacOS/Claude --user-data-dir=$CCA_HOME/desktop/personal"; }'
-jrun() { env -u CLAUDECODE HOME=$H PATH=$T/bin:$PATH REPO=$REPO T=$T zsh -f -c 'source "$REPO/cca.zsh"; '"$JSTUBS"$'\n'"$1" 2>$T/jerr; }
+jrun() { env -u CLAUDECODE HOME=$H CCA_TRASH=$T/trash PATH=$T/bin:$PATH REPO=$REPO T=$T zsh -f -c 'source "$REPO/cca.zsh"; '"$SAFE"$'\n'"$JSTUBS"$'\n'"$1" 2>$T/jerr; }
 J=$(jrun 'cca list --json'); rc=$?
 yes "list --json exits 0" $rc
 eq "list --json: nothing on stderr" "" "$(<$T/jerr)"
@@ -622,6 +649,146 @@ print -r -- '{"profile":{"info_cache":{"Default":{"name":"Person 1"}}}}' > "$CD/
 crun 'cca chrome' >/dev/null
 eq "chrome: a new read replaces the kept profiles" "Default"$'\t'"Person 1" "$(<$A/chrome-profiles-seen 2>&1)"
 unset CD CSTUBS
+
+# 23. no jq: emails are read with a pattern; data that cannot be read is
+# "unknown", never "not logged in"
+mk_home
+NOJQ='path=($T/bin); '
+eq "list shows the email with jq" 1 "$(run 'cca list' | grep -c main@co.com)"
+prof personal; prof esc; prof none; prof nul; prof bad; prof empty
+print -r -- $'{\n  "theme": "dark",\n  "oauthAccount" :  {\n    "accountUuid": "u-1",\n    "emailAddress"  :   "p@x.com",\n    "accessToken": "sk-test-secret"\n  }\n}' > $A/profiles/personal/.claude.json
+print -r -- '{"oauthAccount":{"emailAddress":"q\"u@x.com","organizationName":"A \\ B"}}' > $A/profiles/esc/.claude.json
+print -r -- '{"theme":"dark","mcpServers":{}}' > $A/profiles/none/.claude.json
+print -r -- '{"oauthAccount":null}' > $A/profiles/nul/.claude.json
+print -r -- '{"oauthAccount":{"emailAddress":"n@x.com","extra":{"a":1}}}' > $A/profiles/bad/.claude.json
+out=$(run "$NOJQ"'cca list')
+has "no jq: default email and organization" "main@co.com  (Co)" "$out"
+has "no jq: pretty-printed file with extra spaces" "personal       p@x.com" "$out"
+has "no jq: escaped characters" 'esc            q"u@x.com  (A \ B)' "$out"
+has "no jq: no oauthAccount is not logged in" "none           not logged in" "$out"
+has "no jq: a null oauthAccount is not logged in" "nul            not logged in" "$out"
+has "no jq: no .claude.json is not logged in" "empty          not logged in" "$out"
+has "no jq: unreadable oauthAccount is unknown" "bad            login unknown (install jq)" "$out"
+hasnt "no jq: tokens never printed" "sk-test-secret" "$out"
+J=$(run "$NOJQ"'cca list --json')
+eq "no jq json: email read" "p@x.com" "$(print -r -- $J | jq -r '.accounts[] | select(.name=="personal") | .email')"
+eq "no jq json: signed in is true" true "$(print -r -- $J | jq -r '.accounts[] | select(.name=="personal") | .loggedIn')"
+eq "no jq json: not signed in is false" false "$(print -r -- $J | jq -r '.accounts[] | select(.name=="none") | .loggedIn')"
+eq "no jq json: unknown is null" null "$(print -r -- $J | jq -r '.accounts[] | select(.name=="bad") | .loggedIn')"
+hasnt "no jq json: tokens never printed" "sk-test-secret" "$J"
+eq "with jq json: same email" "p@x.com" "$(run 'cca list --json' | jq -r '.accounts[] | select(.name=="personal") | .email')"
+hasnt "help does not call the desktop app the Mac app" "Mac app" "$(run 'cca help')"
+
+# 24. uninstall.sh, in a throwaway home with a stub launchctl and a throwaway
+# Applications folder. It is never run against the real /Applications or launchd.
+U=$T/uninstall
+mk_uninst() {
+  rm -rf $U
+  mkdir -p $U/bin $U/home/Library/LaunchAgents $U/home/.claude-accounts/profiles/keep $U/Applications \
+    "$U/Applications/Claude Accounts.app/Contents" "$U/home/Applications/Claude Work.app/Contents/Resources" \
+    "$U/home/Applications/Other.app/Contents"
+  print -r -- "#!/bin/sh
+echo \"launchctl \$*\" >> '$U/launchctl.log'
+[ ! -e '$U/fail' ]" > $U/bin/launchctl
+  chmod +x $U/bin/launchctl
+  print -r -- '<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict><key>CFBundleIdentifier</key><string>dev.cca.accounts</string></dict></plist>' > "$U/Applications/Claude Accounts.app/Contents/Info.plist"
+  print -r -- work > "$U/home/Applications/Claude Work.app/Contents/Resources/cca-account"
+  : > $U/home/Library/LaunchAgents/com.example.other.plist
+  : > $U/home/.claude-accounts/cca.zsh
+  print -r -- $'export A=1\n# Claude Code accounts (cca)\n[[ -r ~/.claude-accounts/cca.zsh ]] && source ~/.claude-accounts/cca.zsh' > $U/home/.zshrc
+}
+jobs_on() { local j; for j in "$@"; do : > $U/home/Library/LaunchAgents/dev.cca.$j.plist; done }
+uninst() { env -i HOME=$U/home TMPDIR="$TMPDIR" PATH=$U/bin:/usr/bin:/bin CCA_TEST_APPLICATIONS=$U/Applications "$@" sh $REPO/uninstall.sh > $U/out 2>&1 }
+LA=$U/home/Library/LaunchAgents
+if [[ $U != $T/* || $T != /?* ]]; then
+  bad "uninstall tests run in the throwaway folder" "$T/..." "$U"
+else
+  mk_uninst; jobs_on backup update
+  uninst; yes "uninstall: both jobs: exits 0" $?
+  [[ ! -e $LA/dev.cca.backup.plist && ! -e $LA/dev.cca.update.plist ]] && ok "uninstall: both jobs removed" || bad "uninstall: both jobs removed" "no plists" "$(ls $LA)"
+  has "uninstall: backup job booted out" "launchctl bootout gui/$(id -u) $LA/dev.cca.backup.plist" "$(<$U/launchctl.log)"
+  has "uninstall: autoupdate job booted out" "launchctl bootout gui/$(id -u) $LA/dev.cca.update.plist" "$(<$U/launchctl.log)"
+  has "uninstall: says the autoupdate job went" "Removed the autoupdate job" "$(<$U/out)"
+  [[ -e $LA/com.example.other.plist ]] && ok "uninstall: unrelated job kept" || bad "uninstall: unrelated job kept" kept removed
+  [[ ! -e "$U/Applications/Claude Accounts.app" ]] && ok "uninstall: desktop app removed" || bad "uninstall: desktop app removed" removed kept
+  [[ ! -e "$U/home/Applications/Claude Work.app" && -e "$U/home/Applications/Other.app" ]] && ok "uninstall: only cca launchers removed" || bad "uninstall: only cca launchers removed" "Work gone, Other kept" "$(ls $U/home/Applications)"
+  [[ ! -e $U/home/.claude-accounts/cca.zsh && -d $U/home/.claude-accounts/profiles/keep ]] && ok "uninstall: script removed, data kept" || bad "uninstall: script removed, data kept" "cca.zsh gone, profiles kept" "$(ls -R $U/home/.claude-accounts)"
+  eq "uninstall: .zshrc cleaned" "export A=1" "$(<$U/home/.zshrc)"
+  mk_uninst; jobs_on backup
+  uninst; yes "uninstall: backup only: exits 0" $?
+  [[ ! -e $LA/dev.cca.backup.plist ]] && ok "uninstall: backup only: removed" || bad "uninstall: backup only: removed" removed kept
+  eq "uninstall: backup only: one bootout" 1 "$(grep -c bootout $U/launchctl.log)"
+  mk_uninst; jobs_on update
+  uninst; yes "uninstall: autoupdate only: exits 0" $?
+  [[ ! -e $LA/dev.cca.update.plist ]] && ok "uninstall: autoupdate only: removed" || bad "uninstall: autoupdate only: removed" removed kept
+  mk_uninst
+  uninst; yes "uninstall: no jobs: exits 0" $?
+  [[ ! -e $U/launchctl.log ]] && ok "uninstall: no jobs: launchctl not called" || bad "uninstall: no jobs: launchctl not called" "no calls" "$(<$U/launchctl.log)"
+  mk_uninst; jobs_on backup update; : > $U/fail
+  uninst; yes "uninstall: launchctl fails: still exits 0" $?
+  [[ ! -e $LA/dev.cca.backup.plist && ! -e $LA/dev.cca.update.plist ]] && ok "uninstall: launchctl fails: plists still removed" || bad "uninstall: launchctl fails: plists still removed" removed "$(ls $LA)"
+  rm -f $U/fail
+  uninst; yes "uninstall: second run exits 0" $?
+  mk_uninst; print -r -- '<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict><key>CFBundleIdentifier</key><string>com.example.other</string></dict></plist>' > "$U/Applications/Claude Accounts.app/Contents/Info.plist"
+  uninst
+  [[ -e "$U/Applications/Claude Accounts.app" ]] && ok "uninstall: another app with the same name is kept" || bad "uninstall: another app with the same name is kept" kept removed
+  mk_uninst; mkdir -p "$U/Applications/CCA.app/Contents" "$U/home/Applications/CCA.app/Contents"
+  cp "$U/Applications/Claude Accounts.app/Contents/Info.plist" "$U/Applications/CCA.app/Contents/Info.plist"
+  print -r -- '<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict><key>CFBundleIdentifier</key><string>com.example.cca</string></dict></plist>' > "$U/home/Applications/CCA.app/Contents/Info.plist"
+  uninst; yes "uninstall: both app names: exits 0" $?
+  [[ ! -e "$U/Applications/CCA.app" && ! -e "$U/Applications/Claude Accounts.app" ]] && ok "uninstall: removes CCA.app and Claude Accounts.app" || bad "uninstall: removes CCA.app and Claude Accounts.app" "both gone" "$(ls $U/Applications)"
+  [[ -e "$U/home/Applications/CCA.app" ]] && ok "uninstall: a foreign CCA.app is kept" || bad "uninstall: a foreign CCA.app is kept" kept removed
+  mk_uninst; jobs_on backup
+  uninst CCA_TEST_APPLICATIONS=/; no "uninstall: test folder / refused" $?
+  has "uninstall: refusal says why" "must be a folder inside" "$(<$U/out)"
+  [[ -e $LA/dev.cca.backup.plist ]] && ok "uninstall: refused run changes nothing" || bad "uninstall: refused run changes nothing" "plist kept" removed
+  uninst CCA_TEST_APPLICATIONS=$REPO; no "uninstall: test folder outside the temp folder refused" $?
+  uninst CCA_TEST_APPLICATIONS=$U/missing; no "uninstall: missing test folder refused" $?
+fi
+unset U LA NOJQ J
+
+# 25. cca version from one version source; restore option values
+mk_home
+PV=$(jq -r .version $REPO/desktop/package.json)
+eq "version: cca --version" "cca $PV" "$(run 'cca --version')"
+eq "version: cca version" "cca $PV" "$(run 'cca version')"
+eq "version: works without jq" "cca $PV" "$(run 'path=($T/bin); cca --version')"
+eq "version: works outside the repository" "cca $PV" "$(run 'cd /; cca version')"
+out=$(run 'CCA_VERSION=bad; cca version'); rc=$?
+no "version: an invalid version fails" $rc
+has "version: says the version is invalid" "no valid version" "$out"
+has "help lists cca version" "cca version" "$(run 'cca help')"
+if command -v node >/dev/null; then
+  node $REPO/desktop/scripts/sync-version.js --check >/dev/null 2>&1; yes "version: the CLIs match desktop/package.json" $?
+  VR=$T/vrepo; mkdir -p $VR/desktop/scripts
+  cp $REPO/cca.zsh $REPO/cca.ps1 $VR/; cp $REPO/desktop/package.json $VR/desktop/; cp $REPO/desktop/scripts/sync-version.js $VR/desktop/scripts/
+  sed -i '' 's/"version": "[^"]*"/"version": "9.8.7"/' $VR/desktop/package.json
+  node $VR/desktop/scripts/sync-version.js --check >/dev/null 2>&1; no "version: a mismatch fails the check" $?
+  eq "version: the check changes nothing" "$(grep '^typeset -g CCA_VERSION' $REPO/cca.zsh)" "$(grep '^typeset -g CCA_VERSION' $VR/cca.zsh)"
+  node $VR/desktop/scripts/sync-version.js >/dev/null 2>&1; yes "version: sync rewrites the lines" $?
+  eq "version: zsh line synced" "typeset -g CCA_VERSION=9.8.7" "$(grep '^typeset -g CCA_VERSION' $VR/cca.zsh)"
+  eq "version: ps1 line synced" "\$script:CCA_VERSION = '9.8.7'" "$(grep 'CCA_VERSION = ' $VR/cca.ps1)"
+  node $VR/desktop/scripts/sync-version.js --check >/dev/null 2>&1; yes "version: the check passes after a sync" $?
+  print -r -- '{"version":"not-a-version"}' > $VR/desktop/package.json
+  node $VR/desktop/scripts/sync-version.js --check >/dev/null 2>&1; no "version: an invalid package version fails" $?
+  unset VR
+else
+  skip "version sync (node missing)"
+fi
+prof personal
+out=$(run 'cca restore personal --account'); rc=$?
+no "restore: --account without a value fails" $rc
+has "restore: says --account needs a value" "--account needs a value" "$out"
+unset PV
+
+# A test that reached a safety stub forgot its own stub; say so.
+for f in open launchctl-path front quit; do
+  [[ -s $T/$f.log ]] && print -r -- "note - a test reached the $f safety stub: $(head -1 $T/$f.log)"
+done
 
 print -r -- "$pass passed, $fail failed"
 (( fail == 0 ))

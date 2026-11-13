@@ -104,7 +104,7 @@ Before starting it, CCA looks through the running processes for a Claude app sta
 
 On macOS, `cca app` builds a small AppleScript launcher in `~/Applications` that runs `cca open <name>`. It copies the Claude icon into it, optionally tints the icon with Core Image, and marks the launcher with `Contents/Resources/cca-account` so CCA only ever replaces or removes launchers it made. On Windows, `cca app` makes a Start menu shortcut that runs `cca open <name>` in a hidden PowerShell window.
 
-## The Claude Accounts app
+## The CCA desktop app
 
 The Electron app never reimplements CCA. For each action it runs the CLI as a child process with an argument list, never a shell command string:
 
