@@ -211,7 +211,7 @@ All runs used the x64 installer under emulation in the Windows 11 ARM VM. Data h
 - electron-builder 26 checks for the hook as `customInstallmode` (lowercase m; fixed in v27, electron-builder #10161), so the file also defines that name, empty, when it is missing.
 - **Known limitation:** if a machine has both a per-user and a per-machine copy, an update still shows the options page and the user picks. B.2 does not choose silently in that case; it needs separate handling later.
 - `package.json`: `build.nsis.include` and the explicit `CCA-Setup-${version}.exe` artifact name.
-- `desktop/test/nsis-update-mode.test.js` (4 tests, added to CI): the config, the hook's logic, the lowercase fallback, and that the template still calls the hook. The template test needs `desktop/node_modules`, so CI (which does not install them) skips it; it runs locally after `npm ci` in `desktop`. CI run 43115586965: 3 pass, 1 skipped.
+- `desktop/test/nsis-update-mode.test.js` (4 tests, added to CI): the config, the hook's logic, the lowercase fallback, and that the template still calls the hook. The template test needs `desktop/node_modules`. At first CI did not install them and skipped it (run 43115586965: 3 pass, 1 skipped); CI now installs the desktop packages (`npm ci --ignore-scripts`) and runs it, and in CI a missing template fails the test instead of skipping it.
 
 **Retests with the B.2 installer (`d1637d61…`):**
 
@@ -276,7 +276,7 @@ All runs used the x64 installer under emulation in the Windows 11 ARM VM. Data h
   - removing the swap script after use
   - correcting the Gate B report's Windows shortcut sentence
   - Windows: the account list time under ARM emulation (see the Windows section)
-  - when moving to electron-builder 27, recheck `desktop/build/installer.nsh` (the hook guard is fixed there; run the template test locally with `desktop/node_modules` installed, because CI skips it)
+  - when moving to electron-builder 27, recheck `desktop/build/installer.nsh` (the hook guard is fixed there; the template test in CI fails if the template's hook call changes)
   - the DMG step that hung in the scratch build (see "Candidate builds")
 - The owner's Mac stays on 0.1.11 until Windows passes; it updates itself once 0.2.0 is the latest release.
 - **Signing later:** a personal Apple Developer ID would remove the first-launch block. On Windows, pick the signer name once, because electron-updater compares publisher names.

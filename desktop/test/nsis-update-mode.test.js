@@ -48,7 +48,10 @@ test('the hook is reachable under the guard electron-builder 26 uses (customInst
     'a lowercase fallback, defined only when the documented name is not visible to that guard');
 });
 
-test('the electron-builder template still calls customInstallMode', { skip: !fs.existsSync(template) && 'desktop/node_modules not installed' }, () => {
+// Skipped only on a machine without desktop/node_modules. CI installs them, so
+// there a missing template fails instead of skipping.
+test('the electron-builder template still calls customInstallMode', { skip: !process.env.CI && !fs.existsSync(template) && 'desktop/node_modules not installed' }, () => {
+  assert.ok(fs.existsSync(template), 'electron-builder NSIS template not found: run npm ci in desktop');
   const t = fs.readFileSync(template, 'utf8');
   assert.match(t, /!ifmacrodef customInstall[mM]ode\s*\n\s*!insertmacro customInstallMode/,
     'electron-builder changed the install-mode hook; recheck desktop/build/installer.nsh');

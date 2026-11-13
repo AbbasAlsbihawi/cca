@@ -22,6 +22,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      # The installer test reads electron-builder's NSIS template from
+      # desktop/node_modules. --ignore-scripts skips install scripts, so
+      # Electron's own binary is not downloaded.
+      - name: Install the desktop app's packages (for the installer template test)
+        working-directory: desktop
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Syntax-check the desktop app
         run: |
           for f in $(find desktop/main desktop/renderer desktop/scripts -name '*.js') desktop/preload.js; do

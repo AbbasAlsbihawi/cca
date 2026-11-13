@@ -153,4 +153,4 @@ Only the test accounts `demo-work` and `demo-personal` should appear. Do not inc
 - A machine with both a per-user and an all-users copy installed. The installer then still shows the options page; that is a known limitation.
 - Installing v0.1.12 over 0.2.0 (rollback).
 
-**Known coverage gap (for the maintainers, not part of these tests):** the CI check that electron-builder's NSIS template still calls the scope hook (`desktop/test/nsis-update-mode.test.js`, last test) is skipped in CI, because CI does not install `desktop/node_modules`. It passes only where those packages are installed. It should run in CI, or be run by hand, before the release.
+**For the maintainers (not part of these tests):** the check that electron-builder's NSIS template still calls the scope hook (`desktop/test/nsis-update-mode.test.js`, last test) was skipped in CI at first. CI now installs `desktop/node_modules` and runs it.
