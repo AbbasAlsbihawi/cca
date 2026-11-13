@@ -1,8 +1,8 @@
 # Phase 3D Gate C report: real install and upgrade tests (macOS and Windows)
 
-Date: 2026-11-06 (macOS), 2026-11-11 (Windows) · Branch: `feat/phase-3d-desktop-rename` @ `388cb0d`, plus the Gate B.2 fix in the working tree (not committed) · No release, no pull request.
+Date: 2026-11-06 (macOS), 2026-11-11 (Windows), status updated 2026-11-14 · Branch: `feat/phase-3d-desktop-rename`; macOS tests at `388cb0d`, Windows tests with the Gate B.2 fix, committed as `e6ea97d` · No release.
 
-Status: **macOS done; Windows 11 ARM VM done.** The Windows tests found a second release blocker, fixed in Gate B.2 (not committed yet). Verdict for release: **NOT READY** until Gate B.2 is reviewed and committed with CI green, the contributor's native x64 run is done, and the remaining items below are done.
+Status: **macOS done; Windows 11 ARM VM done.** The Windows tests found a second release blocker, fixed in Gate B.2 (`e6ea97d`, CI green). Verdict for release: **NOT READY** until the contributor's native x64 run is done and the rollback decision is made (see "Release blockers").
 
 ## Executive summary
 
@@ -13,7 +13,7 @@ Status: **macOS done; Windows 11 ARM VM done.** The Windows tests found a second
 - **No AppTranslocation after a normal Finder install,** so the updater can write where the app lives. The translocation seen in M1 came from the test's own copy method.
 - **Windows 11 ARM VM (the x64 installer under emulation):** fresh install, manual upgrade from v0.1.12, both real update paths, uninstall and single instance all pass with the Gate B.2 build. The data stays in `%APPDATA%\claude-accounts`, and the "Claude Accounts" shortcut becomes one "CCA" shortcut.
 - **A second release blocker was found on Windows and fixed (Gate B.2).** The "Restart now" update (`--updated --force-run`) still showed the installer's "Choose Installation Options" page, so an update could move a per-user copy to Program Files behind a UAC prompt. `desktop/build/installer.nsh` now keeps the existing install scope on updates. All six Windows runs pass with the rebuilt installer, from per-user and per-machine installs.
-- **Still open on Windows:** "list failed: timed out" under ARM emulation (a separate finding), the native x64 run, and the SmartScreen first-launch docs.
+- **Still open on Windows:** "list failed: timed out" under ARM emulation (a separate finding) and the native x64 run. The SmartScreen first-launch steps are now in `docs/desktop.md`.
 
 ## Owner approvals
 
@@ -21,7 +21,7 @@ Status: **macOS done; Windows 11 ARM VM done.** The Windows tests found a second
 - **Owner decisions:**
   - 0.2.0 stays unsigned (no company certificate), with first-launch docs.
   - Add a Windows 11 ARM VM test run by Claude Code before the contributor's x64 run.
-- Windows: "Start Gate B.2" (the installer fix, rebuild and retests). The owner did the steps that need a person in the VM: Windows setup, SmartScreen, the first W1 and W2a installs, and the UAC prompts.
+- Windows: "Start Gate B.2" (the installer fix, rebuild and retests), then "Commit and push" for B.2. The owner did the steps that need a person in the VM: Windows setup, SmartScreen, the first W1 and W2a installs, and the UAC prompts.
 - ChatGPT reviewed each stage. It approved skipping M3-B, because the unmodified updater passed. It rated the Windows path A result a release blocker for 0.2.0 and approved Gate B.2 as an NSIS-only fix.
 
 ## Test environments
@@ -60,7 +60,7 @@ Status: **macOS done; Windows 11 ARM VM done.** The Windows tests found a second
 - No update-only zip. The `publish.sh` file list, run alone with stubbed commands, uploads exactly the 7 files above when `NO_UPDATE_ZIP=1` is set.
 - Windows installer settings: GUID `8a5b5904-a939-5366-a9c8-063f626483ae`, the same as 0.1.12 because it is derived from the appId. Install folder and exe `Claude Accounts`, shortcut `CCA`, uninstall name `CCA 0.2.0`.
 
-**Gate B.2 rebuild (2026-11-11), same scratch method, with the B.2 working-tree changes:**
+**Gate B.2 rebuild (2026-11-11), same scratch method, with the B.2 changes (built before they were committed as `e6ea97d`):**
 
 | File | SHA-256 |
 |---|---|
@@ -72,7 +72,8 @@ Status: **macOS done; Windows 11 ARM VM done.** The Windows tests found a second
 
 - `builder-debug.yml` shows the installer script `!include`s `desktop/build/installer.nsh`.
 - B.2 changes only the Windows installer settings. The macOS app code is the same, so the macOS DMGs tested above stay the macOS candidates.
-- **The DMG step hung twice in this scratch build** (once during a host load spike, once at normal load). Both times the image contents were written and then the image stayed mounted until the 30-minute limit. Afterwards nothing held the image and it unmounted at once. The zips were built both times. To check before the release build: build the DMGs alone and watch what keeps the fresh image busy (Spotlight or the antivirus are the first suspects).
+- **The DMG step hung twice in this scratch build** (once during a host load spike, once at normal load). Both times the image contents were written and then the image stayed mounted until the 30-minute limit. Afterwards nothing held the image and it unmounted at once. The zips were built both times.
+- **Cause (found 2026-11-14): the build Mac, not CCA.** Before it unmounts the new image, dmgbuild runs `sync`. On macOS `sync` flushes every file system, and on the build Mac every full `sync` had been stuck since 2026-11-11. After a restart of the Mac, a build from `4845d03` made both DMGs in 43 seconds, and `hdiutil verify` passed. Before a release build, check that a plain `sync` returns within seconds.
 
 ## macOS: fresh install (M1)
 
@@ -206,7 +207,7 @@ All runs used the x64 installer under emulation in the Windows 11 ARM VM. Data h
 - **Path B from per-user v0.1.12:** PASS.
 - **Path A from per-user v0.1.12: FAIL (release blocker).** The installer showed "Choose Installation Options" during the update. The per-user copy was removed and CCA was installed for all users in `C:\Program Files\Claude Accounts` (HKLM, `/allusers`) after a UAC prompt. Data kept. **Cause:** electron-builder 26.15.3's assisted installer skips only the license and folder pages on `--updated`; the install-mode page still shows.
 
-**Gate B.2 fix (working tree, not committed):**
+**Gate B.2 fix (`e6ea97d`):**
 - `desktop/build/installer.nsh`: the `customInstallMode` hook. When the installer runs with `--updated` and exactly one existing install is found, it keeps that scope (per-user or per-machine) and skips the page. Fresh installs, and machines with both scopes, behave as before; the uninstaller is unchanged.
 - electron-builder 26 checks for the hook as `customInstallmode` (lowercase m; fixed in v27, electron-builder #10161), so the file also defines that name, empty, when it is missing.
 - **Known limitation:** if a machine has both a per-user and a per-machine copy, an update still shows the options page and the user picks. B.2 does not choose silently in that case; it needs separate handling later.
@@ -261,12 +262,19 @@ All runs used the x64 installer under emulation in the Windows 11 ARM VM. Data h
 
 ## Release blockers
 
-1. Gate B.2: review, commit, push and green CI (owner's order). Then the contributor's native x64 run, including the account list time.
-2. First-launch docs: macOS 15/26 *Open Anyway* steps, and Windows SmartScreen *More info → Run anyway*. Update docs: on Windows "Restart now" shows a progress page and a Finish page; an all-users install asks for UAC on every update.
-3. Rollback is documented, not tested. Release order:
-   - merge #20, then Phase 3, then this branch
-   - `npm version minor --no-git-tag-version`, then `NO_UPDATE_ZIP=1 npm run release -- --prerelease` from `main`
-   - test, then promote
+1. The contributor's native x64 run, including the account list time (`PHASE-3D-WINDOWS-X64-HANDOFF.md`).
+2. Rollback is documented, not tested: the owner accepts the manual procedure or asks for a test.
+
+Done since this report was first written:
+- Gate B.2, committed as `e6ea97d` with CI green.
+- The first-launch and update docs (`4845d03`): macOS *Open Anyway*, Windows SmartScreen *More info → Run anyway*, the Windows "Restart now" progress and Finish pages, and the UAC prompt on every update of an all-users install.
+- The DMG hang: a problem on the build Mac (see "Candidate builds").
+- The installer template test now runs in CI (`768b7d0`).
+
+Release order, after both items:
+- merge Phase 3 into `main` (#20 is already merged)
+- `npm version minor --no-git-tag-version`, then `NO_UPDATE_ZIP=1 npm run release -- --prerelease` from `main`
+- test, then promote
 
 ## Recommendations
 
@@ -277,6 +285,6 @@ All runs used the x64 installer under emulation in the Windows 11 ARM VM. Data h
   - correcting the Gate B report's Windows shortcut sentence
   - Windows: the account list time under ARM emulation (see the Windows section)
   - when moving to electron-builder 27, recheck `desktop/build/installer.nsh` (the hook guard is fixed there; the template test in CI fails if the template's hook call changes)
-  - the DMG step that hung in the scratch build (see "Candidate builds")
+  - before a release build, check that a plain `sync` returns within seconds (see "Candidate builds")
 - The owner's Mac stays on 0.1.11 until Windows passes; it updates itself once 0.2.0 is the latest release.
 - **Signing later:** a personal Apple Developer ID would remove the first-launch block. On Windows, pick the signer name once, because electron-updater compares publisher names.

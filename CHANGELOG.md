@@ -6,36 +6,31 @@ Each entry is taken from the Git tags, the GitHub release notes and the merged p
 
 ## [Unreleased]
 
-### Changed
-
-- The desktop app is now called CCA: `CCA.app` on macOS, and the display name CCA on Windows, where the program file stays `Claude Accounts.exe` for now. Release files are named `CCA-…`. The app keeps its identifier (`dev.cca.accounts`) and its data folder, so copies of 0.1.x update to it; an updated Mac keeps the folder name `Claude Accounts.app`.
-- `uninstall.sh` removes the desktop app under either name. `publish.sh` can publish full zips only (`NO_UPDATE_ZIP=1`).
-
 ### Added
 
 - `cca version` and `cca --version` on macOS and Windows. The version comes from `desktop/package.json`; `npm version` writes it into `cca.zsh` and `cca.ps1`, and CI fails if they differ.
 - Windows: `cca restore` takes `--dry-run` (`-n`) and `--account <uuid>`, as on macOS. A dry run creates, copies and moves nothing.
+- Documentation for the public launch: a new README, guides under `docs/`, a contribution guide (`CONTRIBUTING.md`), a security policy (`SECURITY.md`), issue forms, a pull request template and this changelog.
+- Desktop app docs: first-launch steps for the unsigned builds (macOS *Open Anyway*, Windows SmartScreen), and what each update prompt does.
+
+### Changed
+
+- The desktop app is now called CCA: `CCA.app` on macOS, and the display name CCA on Windows, where the program file stays `Claude Accounts.exe` for now. Release files are named `CCA-…`. The app keeps its identifier (`dev.cca.accounts`) and its data folder, so copies of 0.1.x update to it; an updated Mac keeps the folder name `Claude Accounts.app`.
+- `uninstall.sh` removes the desktop app under either name. `publish.sh` can publish full zips only (`NO_UPDATE_ZIP=1`).
+- The project is presented as CCA, a multi-account manager for Claude Code and the Claude desktop app. The repository and the `cca` command keep their names.
+- The desktop app's package description matches the CCA name.
+- CI: unit tests for the desktop app: the updater's release file choice (including the rules of the installed 0.1.12 updater), the data folder, and the Windows installer's update mode.
+- CI: the workflow token is read-only; CI also syntax-checks `install.sh` and `uninstall.sh` and checks the CLI versions against `desktop/package.json`.
+- Tests: both suites start from a clean environment, keep every file inside the temporary folder, and stub LaunchServices, the process list, `open` and `launchctl`; `uninstall.sh` is now tested in a throwaway folder.
 
 ### Fixed
 
-- `cca restore --account` without a value is an error instead of being ignored (macOS).
-
+- Windows: an update started with **Restart now** no longer shows the installer's *Choose Installation Options* page. It keeps the existing install (only for you, or for everyone); before, it could move a per-user copy to `C:\Program Files` behind an administrator prompt.
 - macOS: `uninstall.sh` also removes the autoupdate job; before, it kept running every minute after an uninstall.
 - Windows: the desktop app's *New Terminal* opens PowerShell on the chosen account. `cca.ps1` now takes `CCA_ACCOUNT` from the environment unless `cca use` picked another account.
 - macOS: without jq, `cca list` and `cca list --json` read account emails with a simpler pattern, and show a login they cannot read as unknown instead of "not logged in".
 - `cca help` calls the desktop app "the desktop app", not "the Mac app".
-
-### Changed
-
-- CI: unit tests for the desktop updater's release file choice, including the rules of the installed 0.1.12 updater.
-- CI: the workflow token is read-only; CI also syntax-checks `install.sh` and `uninstall.sh` and checks the CLI versions against `desktop/package.json`.
-- The desktop app's package description now matches the CCA name. The installed app's name is unchanged.
-- Tests: both suites start from a clean environment, keep every file inside the temporary folder, and stub LaunchServices, the process list, `open` and `launchctl`; `uninstall.sh` is now tested in a throwaway folder.
-- The project is presented as CCA, a multi-account manager for Claude Code and the Claude desktop app. The repository, the `cca` command and the desktop app's current name are unchanged.
-
-### Added
-
-- Documentation for the public launch: a new README, guides under `docs/`, a contribution guide (`CONTRIBUTING.md`), a security policy (`SECURITY.md`), issue forms, a pull request template and this changelog.
+- `cca restore --account` without a value is an error instead of being ignored (macOS).
 
 ## [0.1.12] - 2026-11-05
 
