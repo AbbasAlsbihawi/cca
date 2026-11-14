@@ -22,6 +22,7 @@ Each entry is taken from the Git tags, the GitHub release notes and the merged p
 - CI: unit tests for the desktop app: the updater's release file choice (including the rules of the installed 0.1.12 updater), the data folder, and the Windows installer's update mode.
 - CI: the workflow token is read-only; CI also syntax-checks `install.sh` and `uninstall.sh` and checks the CLI versions against `desktop/package.json`.
 - Tests: both suites start from a clean environment, keep every file inside the temporary folder, and stub LaunchServices, the process list, `open` and `launchctl`; `uninstall.sh` is now tested in a throwaway folder.
+- The app icon is new original artwork: three account cards on teal. The old icon was built from an Apple SF Symbol, which Apple does not allow in app icons.
 
 ### Fixed
 

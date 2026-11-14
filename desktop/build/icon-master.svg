@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!--
+    CCA app icon master: three stacked account cards on a teal tile.
+    Original artwork drawn for CCA (2026-11-14), MIT licence like the rest of the repository.
+    No Apple SF Symbols, no Anthropic or Claude marks, no third-party glyphs.
+
+    desktop/scripts/make-icons.js reads this file and writes build/icon.png and build/icon.ico.
+    Keep to the subset it supports: <rect> (x, y, width, height, rx, fill, fill-opacity),
+    <circle> (cx, cy, r, fill, fill-opacity) and <g data-min-px="N">, which draws its
+    children only when the output icon is at least N pixels wide.
+  -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="#0F766E"/>
+  <rect x="356" y="300" width="400" height="280" rx="56" fill="#FFFFFF" fill-opacity="0.38"/>
+  <g data-min-px="48">
+    <rect x="312" y="372" width="400" height="280" rx="56" fill="#FFFFFF" fill-opacity="0.66"/>
+  </g>
+  <rect x="268" y="444" width="400" height="280" rx="56" fill="#FFFFFF"/>
+  <g data-min-px="48">
+    <circle cx="348" cy="584" r="44" fill="#0F766E"/>
+    <rect x="416" y="560" width="180" height="48" rx="24" fill="#0F766E" fill-opacity="0.5"/>
+  </g>
+</svg>
