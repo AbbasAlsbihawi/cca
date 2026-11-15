@@ -116,6 +116,21 @@ async function runInteractive(args, onChanged) {
   return res;
 }
 
+// The Windows shell's startup script. Only cca.ps1 reads CCA_ACCOUNT, and a profile
+// loads it only after install.ps1, which the desktop app does not need. So load it
+// here, unless the profile already did. Sent as -EncodedCommand: the base64 text has
+// no space or quote that `cmd /c start` could re-parse. `name` matches NAME_RE.
+function windowsShellScript(name) {
+  return [
+    "$f = Join-Path $env:CCA_HOME 'cca.ps1'",
+    'if (-not (Get-Command cca -CommandType Function -ErrorAction SilentlyContinue)) {',
+    '  if (Test-Path -LiteralPath $f) { . $f }',
+    `  else { Write-Warning "cca.ps1 is missing from $env:CCA_HOME, so claude in this window uses the default account. Open CCA once to restore it." }`,
+    '}',
+    `if (Get-Command cca -CommandType Function -ErrorAction SilentlyContinue) { Write-Host 'This terminal now uses: ${name}  (cca use - to stop)' }`,
+  ].join('\n');
+}
+
 // "New Terminal" for one account. Does not call cca; CCA_ACCOUNT picks the account.
 async function openShell(name) {
   if (typeof name !== 'string' || !NAME_RE.test(name)) return { ok: false, error: 'invalid account name' };
@@ -126,7 +141,8 @@ async function openShell(name) {
     ]);
   }
   if (process.platform === 'win32') {
-    return spawnDetached('cmd', ['/c', 'start', 'powershell', '-NoExit'],
+    const encoded = Buffer.from(windowsShellScript(name), 'utf16le').toString('base64');
+    return spawnDetached('cmd', ['/c', 'start', 'powershell', '-NoExit', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded],
       { ...process.env, CCA_HOME: ccaHome(), CCA_ACCOUNT: name });
   }
   return { ok: false, error: `unsupported platform ${process.platform}` };

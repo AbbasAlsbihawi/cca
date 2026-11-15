@@ -26,6 +26,7 @@ Each entry is taken from the Git tags, the GitHub release notes and the merged p
 
 ### Fixed
 
+- Windows: the desktop app's terminal for an account (**Open Terminal**, and *New Terminal* in the tray menu) now uses that account. It loads `cca.ps1` itself; before, without `install.ps1` the window did not load CCA, and `claude` there used the default account.
 - Windows: an update started with **Restart now** no longer shows the installer's *Choose Installation Options* page. It keeps the existing install (only for you, or for everyone); before, it could move a per-user copy to `C:\Program Files` behind an administrator prompt.
 - macOS: `uninstall.sh` also removes the autoupdate job; before, it kept running every minute after an uninstall.
 - Windows: the desktop app's *New Terminal* opens PowerShell on the chosen account. `cca.ps1` now takes `CCA_ACCOUNT` from the environment unless `cca use` picked another account.
