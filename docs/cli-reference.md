@@ -217,7 +217,7 @@ Prints the installed version, for example `cca 0.1.12`. It works without jq, wit
 |---|---|---|
 | `CCA_QUIET` | both | Set to any value to hide the `claude account: ...` line. |
 | `CCA_BACKUP_KEEP` | both | How many snapshots to keep (default 30). |
-| `CCA_ACCOUNT` | both | The account `cca use` sets. When it is in the environment before the shell starts, that shell uses the account, unless `cca use` picks another; the desktop app's *New Terminal* works this way. On Windows, `cca.ps1` takes it over when it loads and removes it from the environment. A name that is not an account makes `claude` stop with an error. |
+| `CCA_ACCOUNT` | both | The account `cca use` sets. When it is in the environment before the shell starts, that shell uses the account, unless `cca use` picks another; the desktop app's *New Terminal* works this way. On Windows, `cca.ps1` takes it over when it loads and removes it from the environment; the desktop app's terminal loads `cca.ps1` itself when the PowerShell profile does not. A name that is not an account makes `claude` stop with an error. |
 | `CCA_CLAUDE_EXE` | Windows | Path to the Claude desktop app's `Claude.exe`, when it is not in a usual install folder. |
 | `CCA_HOME` | both | Where CCA keeps its data (default `~/.claude-accounts`). |
 

@@ -108,7 +108,7 @@ Releases before 0.2.0 called the app "Claude Accounts" and named their files `Cl
 
 Neither build is signed with a paid developer certificate, so macOS and Windows warn the first time you open it. The steps are under [First launch](#first-launch).
 
-On macOS, install the CLI with `./install.sh` first. On Windows, the app puts its own copy of `cca.ps1` in `~\.claude-accounts` when none is there; run `.\install.ps1` as well if you want the `cca` command in PowerShell.
+On macOS, install the CLI with `./install.sh` first. On Windows, the app puts its own copy of `cca.ps1` in `~\.claude-accounts` when none is there, and its terminal for an account loads it. Run `.\install.ps1` as well if you want the `cca` command in every PowerShell window.
 
 ### First launch
 
