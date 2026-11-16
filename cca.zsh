@@ -28,7 +28,7 @@ typeset -ga CCA_SHARED=(settings.json CLAUDE.md skills plugins agents commands o
 
 # The CCA version. desktop/package.json is the source: `npm version` in desktop/
 # rewrites this line (scripts/sync-version.js), and CI fails if it differs.
-typeset -g CCA_VERSION=0.1.12
+typeset -g CCA_VERSION=0.2.0
 
 # Remember which file this shell loaded and when it changed, so `cca` can
 # reload itself after an update instead of running old code.
