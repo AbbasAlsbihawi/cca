@@ -6,6 +6,10 @@ Each entry is taken from the Git tags, the GitHub release notes and the merged p
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-16
+
+Pre-release, Windows x64 only. macOS files will be added after they are tested.
+
 ### Added
 
 - `cca version` and `cca --version` on macOS and Windows. The version comes from `desktop/package.json`; `npm version` writes it into `cca.zsh` and `cca.ps1`, and CI fails if they differ.
@@ -144,7 +148,8 @@ First release.
 - Windows PowerShell port: `cca.ps1`, `install.ps1` and `uninstall.ps1` ([#1](https://github.com/AbbasAlsbihawi/cca/pull/1), by [AhmedAbasss](https://github.com/AhmedAbasss)).
 - Claude Accounts: one desktop app for macOS and Windows, with automatic updates ([#2](https://github.com/AbbasAlsbihawi/cca/pull/2)).
 
-[Unreleased]: https://github.com/AbbasAlsbihawi/cca/compare/v0.1.12...HEAD
+[Unreleased]: https://github.com/AbbasAlsbihawi/cca/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/AbbasAlsbihawi/cca/compare/v0.1.12...v0.2.0
 [0.1.12]: https://github.com/AbbasAlsbihawi/cca/compare/v0.1.11...v0.1.12
 [0.1.11]: https://github.com/AbbasAlsbihawi/cca/compare/v0.1.10...v0.1.11
 [0.1.10]: https://github.com/AbbasAlsbihawi/cca/compare/v0.1.9...v0.1.10

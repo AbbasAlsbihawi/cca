@@ -1,6 +1,6 @@
 {
   "name": "claude-accounts",
-  "version": "0.1.12",
+  "version": "0.2.0",
   "description": "CCA desktop app: a multi-account manager for Claude Code and the Claude desktop app.",
   "author": "Abbas Alsbihawi",
   "license": "MIT",
