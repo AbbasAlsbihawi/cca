@@ -92,7 +92,12 @@ macOS lets Terminal read Chrome's profile list but not the desktop app. So each 
 
 ## The CCA desktop app
 
-<!-- Phase 4: add a real screenshot of the app on macOS here (assets/screenshots/desktop.png, and desktop-dark.png for dark mode). -->
+On macOS:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../assets/screenshots/desktop-dark.png">
+  <img src="../assets/screenshots/desktop.png" alt="CCA desktop app running on macOS">
+</picture>
 
 On Windows 11:
 
