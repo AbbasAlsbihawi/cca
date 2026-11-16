@@ -204,7 +204,12 @@ CCA works with the Claude desktop app in two ways:
 
 The app calls the `cca` CLI for everything, so the terminal and the app always agree. It relies on undocumented Claude desktop app behaviour and may break after a Claude app update. Details, first sign-in steps and limitations: [docs/desktop.md](docs/desktop.md).
 
-<!-- Phase 4: add a real screenshot of the CCA desktop app on macOS here (assets/screenshots/desktop.png, and desktop-dark.png for dark mode). -->
+The CCA desktop app on macOS:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/desktop-dark.png">
+  <img src="assets/screenshots/desktop.png" alt="CCA desktop app running on macOS">
+</picture>
 
 The CCA desktop app on Windows 11:
 

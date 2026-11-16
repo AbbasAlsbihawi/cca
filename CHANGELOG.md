@@ -6,6 +6,10 @@ Each entry is taken from the Git tags, the GitHub release notes and the merged p
 
 ## [Unreleased]
 
+### Added
+
+- Screenshots of the desktop app on macOS, light and dark, in the README and the desktop app docs.
+
 ## [0.2.0] - 2026-11-16
 
 Published on 2026-11-16, first as a pre-release for Windows x64; the macOS files were added and it became the latest release later the same day.

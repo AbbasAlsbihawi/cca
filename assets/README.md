@@ -2,6 +2,15 @@
 
 The images used in the README and in `docs/`. Every `git clone` downloads this folder, so all files together stay under 6 MB and each screenshot under 600 KB.
 
+## macOS screenshots
+
+Taken on the maintainer's Mac (macOS 27.2.1, Apple silicon) from the desktop app code of v0.2.0 (`desktop/` on main 63d8091, the same as the tag), run with its Electron 44.4.5. For the capture only, the app's data folder was moved to a temporary folder, so the CCA app installed on that Mac and its accounts were not used or changed.
+
+| File | What it shows | Source | Used in |
+|---|---|---|---|
+| `screenshots/desktop.png` | The desktop app, light mode | v0.2.0 app code, Electron 44.4.5 | README, `docs/desktop.md` |
+| `screenshots/desktop-dark.png` | The desktop app, dark mode | v0.2.0 app code, Electron 44.4.5 | README, `docs/desktop.md` |
+
 ## Windows screenshots
 
 Taken on Windows 11 Pro (build 26300, ARM64) in a test virtual machine, where the x64 installer runs under emulation. They come from two local 0.2.0 candidate builds; neither was published.
@@ -27,12 +36,13 @@ Only `walkthrough/windows-3-terminal.png` shows the behaviour fixed in [pull req
 | `demo/cca-demo.gif` | Terminal demo, 13.6 s, 1200 × 700: `cca list`, `cca use personal`, `cca list`, `cca bind acme ~/clients/acme` | Recorded on macOS with the CLI (`cca.zsh`) from main 15038c0; no desktop build involved | README |
 | `social/social-preview.png` | The repository's social preview, 1280 × 640 | Drawn from the icon and text | Not in the docs. A maintainer uploads it under Settings → General → Social preview |
 
-Not here yet: the desktop app on macOS (`screenshots/desktop.png`, `desktop-dark.png`) and the macOS first-launch steps. Comments in the README and in `docs/desktop.md` mark where they go.
+Not here yet: the macOS first-launch steps (*Open Anyway*).
 
 ## How they were made
 
 - **Example data only.** Three accounts, `work`, `personal` and `acme`, with `.example` addresses; the Windows user is `demo`; a stub `claude` stands in for Claude Code, and nobody signed in to Claude.
 - **Windows screenshots:** a temporary local user, Defender, SmartScreen and UAC on. Window-only captures, so no desktop, taskbar or notifications appear.
+- **macOS screenshots:** the app started from the repository with a throwaway home under `/tmp`, captured window-only without the shadow, then scaled to 1000 × 680. The light one asks for the light appearance for the app alone; the system setting was not changed.
 - **Terminal demo:** recorded with [VHS](https://github.com/charmbracelet/vhs) in throwaway home folders under `/tmp`. That is why `cca bind` prints `/private/tmp/cca/home/clients/acme`.
 - **Checks before commit:** size, no metadata (EXIF, XMP, text chunks, comments), and text recognition on every image and every GIF frame against real names, email addresses, paths and tokens.
 
