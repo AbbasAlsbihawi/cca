@@ -92,7 +92,14 @@ macOS lets Terminal read Chrome's profile list but not the desktop app. So each 
 
 ## The CCA desktop app
 
-<!-- Phase 4: add a real screenshot here (assets/screenshots/desktop.png). -->
+<!-- Phase 4: add a real screenshot of the app on macOS here (assets/screenshots/desktop.png, and desktop-dark.png for dark mode). -->
+
+On Windows 11:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../assets/screenshots/desktop-windows-dark.png">
+  <img src="../assets/screenshots/desktop-windows.png" alt="CCA desktop app running on Windows 11">
+</picture>
 
 ### Install
 
@@ -126,8 +133,16 @@ You do this once. Later launches open normally, and so do updates that CCA insta
 **Windows**
 
 1. Run `CCA-Setup-<version>.exe`. Microsoft Defender SmartScreen usually says "Windows protected your PC" and shows *Unknown publisher*. Click **More info**, then **Run anyway**. Whether SmartScreen appears depends on your Windows settings and on the file's reputation, so you may not see it.
+
+   ![SmartScreen says Windows protected your PC, with a More info link and a Don't run button.](../assets/screenshots/first-launch/windows-1-smartscreen.png)
+
+   ![After More info, SmartScreen shows CCA-Setup-0.2.0.exe from Unknown publisher, with a Run anyway button.](../assets/screenshots/first-launch/windows-2-run-anyway.png)
+
 2. On **Choose Installation Options**, keep **Only for me** (the default). It installs in your user folder and normally does not need administrator approval.
    **Anyone who uses this computer** installs in `C:\Program Files`. Windows then asks for administrator approval (a UAC prompt) when you install, and again for every update.
+
+   ![CCA Setup, Choose Installation Options, with Only for me selected.](../assets/screenshots/first-launch/windows-3-install-options.png)
+
 3. Click **Finish** with **Run CCA** checked.
 
 Installing over an older "Claude Accounts" works the same way: the installer finds the existing copy and upgrades it in place.
@@ -155,6 +170,14 @@ Add an account with **+** under the list; the sign-in runs in a terminal window.
 If a command fails, a banner says so. **Show Activity** lists every command the window ran, with its output.
 
 Closing the window keeps the app running in the menu bar (macOS) or the tray (Windows). That menu lists your accounts (click one to open its Claude app), per-account actions (*Open*, *New Terminal*, *Make app*), *Backup now*, *Open window* and *Quit*.
+
+An example on Windows 11, with example accounts: add an account, open an account's page, and open a terminal that uses it.
+
+![The Add Account sheet, with the name client and the email alex@client.example.](../assets/screenshots/walkthrough/windows-1-add-account.png)
+
+![The page of the account acme, with Open Terminal and its bound folder.](../assets/screenshots/walkthrough/windows-2-account-detail.png)
+
+![The terminal from Open Terminal says it now uses acme, and claude reports the account acme.](../assets/screenshots/walkthrough/windows-3-terminal.png)
 
 ### Updates
 

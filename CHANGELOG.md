@@ -12,6 +12,7 @@ Each entry is taken from the Git tags, the GitHub release notes and the merged p
 - Windows: `cca restore` takes `--dry-run` (`-n`) and `--account <uuid>`, as on macOS. A dry run creates, copies and moves nothing.
 - Documentation for the public launch: a new README, guides under `docs/`, a contribution guide (`CONTRIBUTING.md`), a security policy (`SECURITY.md`), issue forms, a pull request template and this changelog.
 - Desktop app docs: first-launch steps for the unsigned builds (macOS *Open Anyway*, Windows SmartScreen), and what each update prompt does.
+- Images in the README and the desktop app docs (`assets/`): the icon in the README header, a terminal demo, the desktop app on Windows 11, its first launch on Windows and an account walkthrough, plus a social preview image. All of them show example data only. macOS screenshots are not included yet.
 
 ### Changed
 
