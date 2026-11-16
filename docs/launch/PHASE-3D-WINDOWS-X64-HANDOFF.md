@@ -128,7 +128,8 @@ Expected `cca-check.ps1` results use these short names:
 | 7 | Path A, per-user | `cca-reset.ps1 -Scope currentuser` (elevated), then path A from a normal PowerShell. Click Finish. | **No** "Choose Installation Options" page and no UAC prompt; it goes straight to the progress page. Per-user 0.2.0; data unchanged; after Finish one `running:` line from the per-user folder, `args=[--updated]`. |
 | 8 | Path B, all users | `cca-reset.ps1 -Scope allusers` (elevated), then path B from a normal PowerShell. Answer the UAC prompt with *Yes*. | One UAC prompt. All-users 0.2.0; no `HKCU:` line; data unchanged; CCA does not start. |
 | 9 | Path A, all users | `cca-reset.ps1 -Scope allusers` (elevated), then path A from a normal PowerShell. UAC: *Yes*. Click Finish. | One UAC prompt at the start, then **no** options page. All-users 0.2.0; after Finish CCA runs from Program Files with `parent=explorer.exe`. In Task Manager → Details, the "Elevated" column for `Claude Accounts.exe` says **No**. |
-| 10 | Clean up | `cca-reset.ps1 -Scope none` (elevated). | Nothing installed. You can delete the VM. |
+| 10 | Open Terminal | With CCA still open from test 9, click **demo-work** in the sidebar, then **Open Terminal**. In the PowerShell window that opens, run `cca status`. Close that window. | The window prints `This terminal now uses: demo-work  (cca use - to stop)` and no warning that `cca.ps1` is missing. The first line of `cca status` is `Here: demo-work  (set in this terminal)`. `cca-check.ps1` output is the same as after test 9. |
+| 11 | Clean up | `cca-reset.ps1 -Scope none` (elevated). | Nothing installed. You can delete the VM. |
 
 Command for test 3:
 
@@ -143,7 +144,7 @@ If anything differs from "Expected", stop at that test, take a screenshot, keep 
 
 - Windows edition and version, and the `os:` line from `cca-check.ps1` (it must say `arch=AMD64`).
 - For each test: PASS or FAIL, plus the `cca-check.ps1` output.
-- Screenshots: SmartScreen (test 1), the options page (tests 1 and 5), and anything unexpected.
+- Screenshots: SmartScreen (test 1), the options page (tests 1 and 5), the terminal window with the `cca status` output (test 10), and anything unexpected.
 - The seconds from test 3, and whether "list failed: timed out" appeared.
 - The VM tool you used and its CPU and memory settings.
 
@@ -154,5 +155,6 @@ Only the test accounts `demo-work` and `demo-personal` should appear. Do not inc
 - The full download by the app's own updater from GitHub. There is no 0.2.0 release yet; the tests start the installer with the same arguments the updater uses.
 - A machine with both a per-user and an all-users copy installed. The installer then still shows the options page; that is a known limitation.
 - Installing v0.1.12 over 0.2.0 (rollback).
+- *New Terminal* in the tray menu. It opens the terminal the same way as **Open Terminal** (test 10).
 
 **For the maintainers (not part of these tests):** the check that electron-builder's NSIS template still calls the scope hook (`desktop/test/nsis-update-mode.test.js`, last test) was skipped in CI at first. CI now installs `desktop/node_modules` and runs it.
