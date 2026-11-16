@@ -8,7 +8,7 @@ Each entry is taken from the Git tags, the GitHub release notes and the merged p
 
 ## [0.2.0] - 2026-11-16
 
-Pre-release, Windows x64 only. macOS files will be added after they are tested.
+Published on 2026-11-16, first as a pre-release for Windows x64; the macOS files were added and it became the latest release later the same day.
 
 ### Added
 
