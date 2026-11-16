@@ -1,3 +1,5 @@
+<img src="assets/brand/cca-icon-256.png" alt="CCA icon" width="128" height="128">
+
 # CCA
 
 **One workflow. Multiple accounts.**
@@ -14,7 +16,16 @@ CCA is a free, open-source command-line tool for macOS and Windows, with an opti
 
 [Install](#install) · [Quick start](#quick-start) · [Commands](#commands) · [Desktop app](#desktop-app) · [Platform support](#platform-support) · [Documentation](#documentation) · [Releases](https://github.com/AbbasAlsbihawi/cca/releases)
 
-<!-- Phase 4: add a short terminal demo here (assets/demo/cca-demo.gif) once a real recording exists. -->
+![Terminal demo: cca lists three example accounts, switches this terminal to personal, and binds a folder to acme.](assets/demo/cca-demo.gif)
+
+The demo runs these commands, with example accounts in a throwaway home folder:
+
+```sh
+cca list                       # the accounts; * marks the one this terminal uses
+cca use personal               # this terminal now uses "personal"
+cca list
+cca bind acme ~/clients/acme   # that folder and its subfolders now use "acme"
+```
 
 ## Why CCA
 
@@ -193,7 +204,14 @@ CCA works with the Claude desktop app in two ways:
 
 The app calls the `cca` CLI for everything, so the terminal and the app always agree. It relies on undocumented Claude desktop app behaviour and may break after a Claude app update. Details, first sign-in steps and limitations: [docs/desktop.md](docs/desktop.md).
 
-<!-- Phase 4: add a real screenshot of the CCA desktop app here (assets/screenshots/desktop.png). -->
+<!-- Phase 4: add a real screenshot of the CCA desktop app on macOS here (assets/screenshots/desktop.png, and desktop-dark.png for dark mode). -->
+
+The CCA desktop app on Windows 11:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/desktop-windows-dark.png">
+  <img src="assets/screenshots/desktop-windows.png" alt="CCA desktop app running on Windows 11">
+</picture>
 
 ## How it works
 

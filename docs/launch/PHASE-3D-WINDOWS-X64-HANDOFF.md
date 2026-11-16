@@ -15,7 +15,7 @@ Please send back the results described in "What to send back". Do not publish an
 
 | File | Where from | SHA-256 |
 |---|---|---|
-| `CCA-Setup-0.2.0.exe` (the candidate) | Sent to you by the maintainer | `4ce1b2e08b22e0ed5f8fed658d3cee4e5fe03ff7939f3bcff92f9ec1a52270f1` |
+| `CCA-Setup-0.2.0.exe` (the candidate) | Sent to you by the maintainer | `44bf0bef708918eb61aa9635d322fe1905022591429b663987a0fecc0c7788ab` |
 | `ClaudeAccounts-Setup-0.1.12.exe` (the current release) | [GitHub release v0.1.12](https://github.com/AbbasAlsbihawi/cca/releases/tag/v0.1.12) | `4a4e1f5f6bf1ee6ae46d7f1925d5d647bb5f7bfe7d12ed62b56c07f47b5f9e68` |
 
 This candidate carries the new app icon: three stacked cards on a teal tile. An installer or app that shows the old orange icon is an older build; stop and ask the maintainer.
