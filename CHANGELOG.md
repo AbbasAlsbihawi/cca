@@ -8,6 +8,9 @@ Each entry is taken from the Git tags, the GitHub release notes and the merged p
 
 ### Added
 
+- macOS: `cca router on|off|status`, an opt-in fix for MCP sign-ins that land in the wrong Claude app copy. A small app becomes the opener of `claude://` links and hands each one to the copy used last, or asks which account; a launchd job (`dev.cca.router`) gives the links back to it when a Claude copy claims them on start. `off` undoes all of it. The log never keeps sign-in codes.
+- macOS: `cca signin <name>` signs in an account's MCP servers from the terminal, and `cca` lists the MCP servers waiting for a sign-in in each account.
+- `uninstall.sh` removes the sign-in router and its job and gives `claude://` links back to Claude.
 - Screenshots of the desktop app on macOS, light and dark, in the README and the desktop app docs.
 
 ## [0.2.0] - 2026-11-16
