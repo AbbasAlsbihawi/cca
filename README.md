@@ -50,7 +50,7 @@ CCA removes that step:
 | Backup and restore | `cca backup` takes a snapshot of every account's local Claude Code conversations. `cca restore` brings back what is missing and never overwrites a file. Optional daily backup. | macOS, Windows |
 | Claude in Chrome per account | `cca chrome` links each account to its own Chrome profile. | macOS |
 | Restart after Claude app updates | `cca update` and `cca autoupdate` restart every open copy of the Claude desktop app on the newly installed version. | macOS |
-| Sign-ins reach the right copy | With several Claude app copies open, an MCP sign-in can come back to the wrong one. `cca router on` sends it to the copy you used last; `cca signin <name>` signs in from the terminal instead. | macOS |
+| Sign-ins reach the right copy | With several Claude app copies open, an MCP sign-in can come back to the wrong one. `cca router on` sends it to the copy you used last; `cca signin <name>` signs in from the terminal instead. | `cca signin`: macOS and Windows; `cca router`: macOS |
 | CCA desktop app | A desktop app that does all of the above with buttons, plus a menu bar or tray menu. It updates itself. | macOS, Windows |
 
 Shared versus separate: settings, `CLAUDE.md`, skills and plugins are **shared** by every account. Logins, chat history, memory, MCP sign-ins and MCP servers added with `claude mcp add` stay **separate** per account. See [How it works](#how-it-works).
@@ -175,7 +175,7 @@ Every account shares your default account's `settings.json`, `CLAUDE.md`, skills
 | `cca bind <name> [folder]` | Always use an account in a folder and its subfolders. |
 | `cca unbind [folder]` | Remove a folder binding. |
 | `cca run <name> [args]` | Run `claude` once with an account. |
-| `cca signin <name>` | Sign in an account's MCP servers from the terminal, where the sign-in cannot reach another account (macOS). |
+| `cca signin <name>` | Sign in an account's MCP servers from the terminal, where the sign-in cannot reach another account (macOS and Windows). |
 | `cca list [--json]` | List accounts with their emails (`--json` for scripts and the desktop app). |
 | `cca app <name> [color]` | Make a "Claude &lt;Name&gt;" launcher for the account's Claude desktop app, with an optional coloured icon. |
 | `cca open <name>` | Open the Claude desktop app for an account, or bring it to the front. |
@@ -186,7 +186,7 @@ Every account shares your default account's `settings.json`, `CLAUDE.md`, skills
 | `cca autobackup on\|off\|status` | A daily backup at 13:00. |
 | `cca update` | Quit and reopen every open Claude app copy so each runs the installed version (macOS). |
 | `cca autoupdate on\|off\|status` | Do that automatically after the Claude app updates (macOS). |
-| `cca router on\|off\|status` | Send `claude://` links, such as MCP sign-ins coming back from the browser, to the Claude app copy you used last (macOS, off by default). |
+| `cca router on\|off\|status` | Send `claude://` links, such as MCP sign-ins coming back from the browser, to the Claude app copy you used last (macOS only, off by default). |
 | `cca version` | Show the installed CCA version (also `cca --version`). |
 | `cca help` | Show the built-in help. |
 
@@ -253,7 +253,8 @@ More detail: [docs/privacy-security.md](docs/privacy-security.md). Security poli
 | CCA desktop app self-update | Supported | Supported |
 | Claude in Chrome per account (`cca chrome`) | Supported | Not available |
 | Restart after Claude app updates (`cca update`, `cca autoupdate`) | Supported | Not available |
-| Sign-in router and terminal sign-in (`cca router`, `cca signin`) | Supported | Not available |
+| Terminal sign-in (`cca signin`) | Supported | Supported |
+| Sign-in link router (`cca router`) | Supported | Not available |
 | Linux | Not supported | — |
 
 Evidence behind each status and the full list of differences: [docs/platform-support.md](docs/platform-support.md).

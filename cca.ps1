@@ -301,6 +301,60 @@ function Invoke-CcaRun($a) {
     Invoke-CcaClaude $a[0] @($a | Select-Object -Skip 1)
 }
 
+# The connectors (MCP servers) that last asked an account to sign in, one short
+# name each ("plugin:figma:figma" -> "figma"). Claude keeps this list in the
+# account's mcp-needs-auth-cache.json and drops a name once it signs in. Keys are
+# read in sorted order, like jq's keys; a missing or unreadable file gives nothing.
+function Get-CcaNeedsSignin([string]$name) {
+    if (-not (Test-CcaExists $name)) { return }
+    $dir = Get-CcaDir $name
+    if (-not $dir) { $dir = $script:CCA_MAIN_DIR }
+    $f = Join-Path $dir 'mcp-needs-auth-cache.json'
+    if (-not (Test-Path -LiteralPath $f -PathType Leaf)) { return }
+    $o = $null
+    try { $o = Get-Content -LiteralPath $f -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop } catch { return }
+    if (-not ($o -is [Management.Automation.PSCustomObject])) { return }
+    $keys = [string[]]@($o.PSObject.Properties | ForEach-Object { [string]$_.Name })
+    [Array]::Sort($keys, [StringComparer]::Ordinal)
+    $seen = @{}
+    foreach ($k in $keys) {
+        $n = $k -replace '\p{Cc}', ''
+        if (-not $n) { continue }
+        $n = $n.Substring($n.LastIndexOf(':') + 1)
+        if ($n -and -not $seen.ContainsKey($n)) { $seen[$n] = $true; $n }
+    }
+}
+
+# Signs in an account's connectors from the terminal. In the Claude app the
+# browser sign-in comes back to whichever app copy Windows picks, so with more
+# than one copy open it can land in another account and fail. Claude in a
+# terminal gets the sign-in back directly, under the right account.
+function Invoke-CcaSignin($a) {
+    $name = if ($a.Count) { [string]$a[0] } else { '' }
+    if (-not $name -or -not (Test-CcaExists $name)) {
+        Write-CcaFail ("usage: cca signin <name>. Accounts: " + ((Get-CcaProfiles) -join ', '))
+        return
+    }
+    if ([Console]::IsInputRedirected -or [Console]::IsOutputRedirected) {
+        Write-CcaFail "run it in a terminal window: cca signin $name"
+        return
+    }
+    $waiting = @(Get-CcaNeedsSignin $name)
+    if ($waiting.Count) { Write-Host "'$name' connectors waiting for sign-in: $($waiting -join ', ')" }
+    else { Write-Host "'$name' has no connector waiting for sign-in (as Claude last saw it)." }
+    Write-Host 'In Claude: type /mcp, pick the connector, sign in, and check the account on the browser page.'
+    Write-Host 'When it shows connected, type /exit. Chats already open in the app see it in a new chat.'
+    Invoke-CcaClaude $name @()
+}
+
+# The claude:// link router is macOS only: on Windows a claude:// link opened
+# while a Claude copy runs does not reach that copy (the app reads the link only
+# when it starts), so no router could hand it to the right one.
+function Invoke-CcaRouter {
+    [Console]::Error.WriteLine('cca router: macOS only. On Windows, sign connectors in from a terminal: cca signin <name>')
+    Set-CcaFailed
+}
+
 # Asks Claude Code itself whether this account is signed in. A new config folder can
 # carry another account's email in .claude.json before any login, so the email alone
 # proves nothing. Returns $true or $false, or $null when claude cannot tell
@@ -397,6 +451,17 @@ function Show-CcaStatus {
         Write-Host ''
         Write-Host 'Folders:'
         foreach ($x in $b) { Write-Host "  $($x.Path) -> $($x.Name)" }
+    }
+    $lines = @()
+    foreach ($name in (Get-CcaProfiles)) {
+        $waiting = @(Get-CcaNeedsSignin $name)
+        if ($waiting.Count) { $lines += "  ${name}: $($waiting -join ', ')" }
+    }
+    if ($lines.Count) {
+        Write-Host ''
+        Write-Host 'Connectors waiting for sign-in (as Claude last saw them):'
+        foreach ($l in $lines) { Write-Host $l }
+        Write-Host '  Sign in from the terminal: cca signin <name>'
     }
 }
 
@@ -677,7 +742,7 @@ function Invoke-CcaApp($a) {
     if ($name -cne $default -and -not (Test-Path -LiteralPath (Join-Path $script:CCA_HOME "desktop\$name"))) {
         $t = (Get-Culture).TextInfo.ToTitleCase($name)
         Write-Host "First sign-in: quit every Claude window, open 'Claude $t', sign in, then reopen the others."
-        Write-Host "Connectors (MCP servers) need the same, or sign them in from the terminal: cca run $name, then /mcp."
+        Write-Host "Connectors (MCP servers) need the same, or sign them in from the terminal: cca signin $name."
     }
 }
 
@@ -1007,6 +1072,9 @@ cca - switch Claude Code between accounts (Windows)
   cca bind <name> [folder]   always use an account in a folder and its subfolders
   cca unbind [folder]        remove a folder binding
   cca run <name> [args]      run claude once with an account
+  cca signin <name>          sign in an account's connectors (MCP servers) from the terminal;
+                             use it when a sign-in inside the app lands in another account
+  cca router                 macOS only (claude:// links cannot reach an open copy on Windows)
   cca list [--json]          list accounts with their emails (--json: for scripts and the desktop app)
   cca app <name> [color]     make a 'Claude <Name>' Start menu shortcut for the desktop app
                              (colors: red orange yellow green teal blue purple pink gray)
@@ -1040,6 +1108,8 @@ function cca {
         'bind'    { Invoke-CcaBind $rest }
         'unbind'  { Invoke-CcaUnbind $rest }
         'run'     { Invoke-CcaRun $rest }
+        'signin'  { Invoke-CcaSignin $rest }
+        'router'  { Invoke-CcaRouter }
         'app'     { Invoke-CcaApp $rest }
         'open'    { Invoke-CcaOpen $rest }
         { $_ -in 'remove', 'rm' } { Invoke-CcaRemove $rest }
@@ -1084,9 +1154,9 @@ Register-ArgumentCompleter -CommandName cca -ScriptBlock {
     param($wordToComplete, $commandAst, $cursorPosition)
     $words = @($commandAst.CommandElements | ForEach-Object { $_.ToString() })
     $pos = $words.Count - $(if ($wordToComplete) { 1 } else { 0 })
-    $cmds = 'status', 'list', 'add', 'login', 'use', 'bind', 'unbind', 'run', 'app', 'open', 'remove', 'backup', 'restore', 'autobackup', 'version', 'help'
+    $cmds = 'status', 'list', 'add', 'login', 'use', 'bind', 'unbind', 'run', 'signin', 'router', 'app', 'open', 'remove', 'backup', 'restore', 'autobackup', 'version', 'help'
     $pick = if ($pos -le 1) { $cmds }
-        elseif ($pos -eq 2 -and $words[1] -in 'login', 'use', 'bind', 'run', 'app', 'open', 'remove', 'restore') { Get-CcaProfiles }
+        elseif ($pos -eq 2 -and $words[1] -in 'login', 'use', 'bind', 'run', 'signin', 'app', 'open', 'remove', 'restore') { Get-CcaProfiles }
         elseif ($pos -eq 2 -and $words[1] -in 'list', 'ls') { '--json' }
         elseif ($pos -eq 2 -and $words[1] -eq 'backup') { 'list', '--quiet' }
         elseif ($pos -eq 2 -and $words[1] -eq 'autobackup') { 'on', 'off', 'status' }

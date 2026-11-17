@@ -14,7 +14,8 @@
 | CCA desktop app self-update | Supported | Supported |
 | Claude in Chrome per account (`cca chrome`) | Supported | Not available |
 | Restart after Claude app updates (`cca update`, `cca autoupdate`) | Supported | Not available |
-| Sign-in router and terminal sign-in (`cca router`, `cca signin`) | Supported | Not available |
+| Terminal sign-in for MCP servers (`cca signin`) and the waiting list in `cca` | Supported | Supported |
+| Sign-in link router (`cca router`) | Supported | Not available: the Claude app on Windows reads a `claude://` link only when it starts, so a link cannot reach a copy that is already open ([anthropics/claude-code#31476](https://github.com/anthropics/claude-code/issues/31476)) |
 | `cca import` (old name of `restore`) | Supported | Not available |
 | Linux | Not supported | — |
 
