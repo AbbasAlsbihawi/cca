@@ -463,6 +463,52 @@ New-Item -ItemType Directory -Force -Path $tb | Out-Null
 Set-Content -LiteralPath (Join-Path $tb 'projects') -Value 'not a folder'
 code 'restore: a malformed snapshot does not fail' 0 { cca restore third -n }
 
+# Runs cca in a child host with stdin redirected and returns stdout and stderr
+# as text: cca writes errors straight to the console's stderr, which a command
+# in this session cannot capture.
+function child($cmdline) {
+    $o = @('' | & $pshost -NoProfile -Command ". '$cca'; $cmdline; exit `$LASTEXITCODE" 2>&1 | ForEach-Object { [string]$_ })
+    @{ Code = $LASTEXITCODE; Out = ($o -join ' ') }
+}
+
+# cca signin and the connectors waiting for sign-in, as on macOS. The router
+# is macOS only: on Windows a claude:// link cannot reach an open Claude copy.
+$box = newbox
+New-Item -ItemType Directory -Force -Path (Join-Path $env:CCA_HOME 'profiles\personal') | Out-Null
+stubclaude (Join-Path $box 'bin')
+. $cca
+Set-Content -LiteralPath (Join-Path (Get-CcaDir 'personal') 'mcp-needs-auth-cache.json') -Encoding ASCII -Value '{"plugin:figma:figma":{"timestamp":1},"plugin:x:figma":{"timestamp":2},"higgsfield":{"timestamp":3}}'
+$out = (cca 6>&1) -join "`n"
+has 'signin: status lists the waiting connectors' 'Connectors waiting for sign-in (as Claude last saw them):' $out
+# Sorted by the full key, as jq's keys gives them to cca.zsh.
+has 'signin: status names each connector once' '  personal: higgsfield, figma' $out
+eq 'signin: figma is listed once' 1 ([regex]::Matches($out, 'figma').Count)
+has 'signin: status shows the signin hint' '  Sign in from the terminal: cca signin <name>' $out
+if ($out.Contains('default:')) { bad 'signin: an account with no cache is not listed' 'no default line' "'$out'" }
+else { ok 'signin: an account with no cache is not listed' }
+
+code 'signin: no name exits 1' 1 { cca signin }
+has 'signin: no name prints the usage' 'usage: cca signin <name>' (child 'cca signin').Out
+code 'signin: an unknown account exits 1' 1 { cca signin nosuchacct }
+
+$r = child 'cca signin personal'
+eq 'signin: redirected input exits 1' 1 $r.Code
+has 'signin: redirected input asks for a terminal' 'run it in a terminal window: cca signin personal' $r.Out
+if ($r.Out -like '*CFG=*') { bad 'signin: redirected input does not start claude' 'no claude run' $r.Out }
+else { ok 'signin: redirected input does not start claude' }
+
+code 'router: cca router on exits 1' 1 { cca router on }
+$r = child 'cca router on'
+eq 'router: exits 1 in a new host too' 1 $r.Code
+has 'router: macOS only' 'cca router: macOS only. On Windows, sign connectors in from a terminal: cca signin <name>' $r.Out
+
+Set-Content -LiteralPath (Join-Path (Get-CcaDir 'personal') 'mcp-needs-auth-cache.json') -Encoding ASCII -Value '{not json'
+code 'signin: a bad cache does not fail the status' 0 { cca }
+$out = (cca 6>&1 2>&1) -join "`n"
+if ($out.Contains('waiting for sign-in')) { bad 'signin: a bad cache prints nothing' 'no waiting section' "'$out'" }
+else { ok 'signin: a bad cache prints nothing' }
+eq 'signin: a bad cache gives no names' 0 @(Get-CcaNeedsSignin 'personal').Count
+
 foreach ($b in $script:boxes) { Remove-Item -LiteralPath $b -Recurse -Force -ErrorAction SilentlyContinue }
 
 "$script:pass passed, $script:fail failed"

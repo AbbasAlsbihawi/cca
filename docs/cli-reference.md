@@ -121,7 +121,7 @@ cca run acme --continue
 
 `cca run` also works where the `claude` wrapper is not loaded, which makes it the way to use a specific account from scripts.
 
-### `cca signin <name>` (macOS)
+### `cca signin <name>` (macOS and Windows)
 
 Opens `claude` in the terminal with an account, after listing the MCP servers that last asked that account to sign in. Type `/mcp`, pick the server and sign in, then `/exit`. A terminal sign-in returns to `localhost`, so it cannot land in another account's Claude app copy. Chats already open in the app see the new sign-in in a new chat. It refuses to run outside a terminal.
 
@@ -163,6 +163,8 @@ Quits every open Claude app copy, as Cmd+Q does, and opens it again, so each one
 `on` adds a launchd job that runs once a minute and whenever `/Applications` changes. After the Claude app updates, it restarts every copy that was open, reopens copies that closed for the update, and closes the default copy that the Claude updater opened in their place. The log is `~/.claude-accounts/autoupdate.log`. `off` removes the job; `status` shows whether it is on and the installed Claude version.
 
 ### `cca router on|off|status` (macOS)
+
+macOS only. On Windows, `cca router` fails with a message that points to `cca signin <name>`: the Claude app on Windows reads a `claude://` link only when it starts, so a link cannot reach a copy that is already open ([anthropics/claude-code#31476](https://github.com/anthropics/claude-code/issues/31476)).
 
 macOS hands every `claude://` link to one running copy of Claude.app, the one it picks. With a copy open per account, an MCP sign-in started in one copy can come back to another and stay stuck on "Complete sign-in in your browser".
 
