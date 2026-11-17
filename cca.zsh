@@ -243,6 +243,50 @@ _cca_run() {
   _cca_exec $name claude "$@"
 }
 
+# Prints the connectors (MCP servers) that last asked an account to sign in, one
+# short name per line ("plugin:figma:figma" -> "figma"). Claude keeps this list
+# in the account's mcp-needs-auth-cache.json and drops a name once it signs in.
+_cca_needs_signin() {
+  emulate -L zsh
+  local dir n
+  local -a names
+  dir=$(_cca_dir "$1") || return 1
+  local f=${dir:-$CCA_MAIN_DIR}/mcp-needs-auth-cache.json
+  [[ -r $f ]] && (( $+commands[jq] )) || return 0
+  for n in ${(f)"$(jq -r 'keys[]' $f 2>/dev/null)"}; do
+    n=${n//[[:cntrl:]]/}
+    [[ -n $n ]] && names+=(${n##*:})
+  done
+  (( $#names )) && print -rl -- ${(u)names}
+  return 0
+}
+
+# Signs in an account's connectors from the terminal. In the Claude app the
+# browser sign-in returns to whichever app copy macOS picks, so with more than
+# one copy open it can land in another account and fail. Claude in a terminal
+# gets the sign-in back directly, under the right account.
+_cca_signin() {
+  emulate -L zsh
+  local name=$1
+  if [[ -z $name ]] || ! _cca_exists "$name"; then
+    _cca_err "usage: cca signin <name>. Accounts: ${(j:, :)${(f)"$(_cca_profiles)"}}"
+    return 1
+  fi
+  if [[ ! -t 0 || ! -t 1 ]]; then
+    _cca_err "run it in a terminal window: cca signin $name"
+    return 1
+  fi
+  local -a waiting=(${(f)"$(_cca_needs_signin $name)"})
+  if (( $#waiting )); then
+    print -r -- "'$name' connectors waiting for sign-in: ${(j:, :)waiting}"
+  else
+    print -r -- "'$name' has no connector waiting for sign-in (as Claude last saw it)."
+  fi
+  print -r -- "In Claude: type /mcp, pick the connector, sign in, and check the account on the browser page."
+  print -r -- "When it shows connected, type /exit. Chats already open in the app see it in a new chat."
+  _cca_exec $name claude
+}
+
 # Prints the Claude app data folder for an account; nothing for the default account.
 _cca_app_data() {
   _cca_exists "$1" || return 1
@@ -555,7 +599,7 @@ _cca_app() {
   print -r -- "Made: $dest"
   if [[ $name != "$(_cca_default_name)" && ! -d $CCA_HOME/desktop/$name ]]; then
     print -r -- "First sign-in: quit every Claude window (Cmd+Q), open 'Claude ${(C)name}', sign in, then reopen the others."
-    print -r -- "Connectors (MCP servers) need the same, or sign them in from the terminal: cca run $name, then /mcp."
+    print -r -- "Connectors (MCP servers) need the same, or sign them in from the terminal: cca signin $name."
   fi
 }
 
@@ -1149,9 +1193,335 @@ _cca_list() {
   done
 }
 
+# --- Claude link router -------------------------------------------------------
+# macOS gives every claude:// link (a connector sign-in coming back from the
+# browser, an "open in the app" link) to one running copy of Claude.app, the one
+# it picks. With a copy open per account, a sign-in started in one copy can land
+# in another and fail. `cca router on` makes "Claude Link Router" the opener of
+# claude:// links: it passes each link to the copy you used last (the one in
+# front of the other copies) and asks when it cannot tell. `cca router off`
+# gives the links back to Claude.app and moves the router to the Trash.
+# Each Claude copy claims claude:// links again when it starts, so `on` also
+# loads a launchd job (dev.cca.router) that gives them back to the router.
+# A sign-in code travels in the link, so the log keeps only its start.
+
+: ${CCA_ROUTER_APP:="$HOME/Applications/Claude Link Router.app"}
+typeset -g CCA_ROUTER_ID=local.cca.claude-link-router
+typeset -g CCA_CLAUDE_ID=com.anthropic.claudefordesktop
+
+# Prints the pids of the visible apps, front to back.
+_cca_front_pids() {
+  emulate -L zsh
+  local asn
+  for asn in ${(f)"$(lsappinfo visibleProcessList 2>/dev/null | grep -oE 'ASN:0x[0-9a-fA-F]+-0x[0-9a-fA-F]+')"}; do
+    lsappinfo info -only pid $asn 2>/dev/null | grep -oE 'pid = [0-9]+' | grep -oE '[0-9]+'
+  done
+  return 0
+}
+
+# Picks the copy a link goes to and prints "pid<TAB>account<TAB>why".
+# Returns 1 when no copy is open, 2 when several are open and none is visible.
+_cca_route_pick() {
+  emulate -L zsh
+  local line pid
+  local -a copies=(${(f)"$(_cca_instances)"})
+  local -A account
+  (( $#copies )) || return 1
+  for line in $copies; do account[${line#*$'\t'}]=${line%%$'\t'*}; done
+  if (( $#copies == 1 )); then
+    pid=${copies[1]#*$'\t'}
+    print -r -- "$pid"$'\t'"$account[$pid]"$'\t'"the only copy open"
+    return 0
+  fi
+  for pid in ${(f)"$(_cca_front_pids)"}; do
+    if [[ -n ${account[$pid]} ]]; then
+      print -r -- "$pid"$'\t'"$account[$pid]"$'\t'"the copy used last"
+      return 0
+    fi
+  done
+  return 2
+}
+
+# Asks which account's copy should open the link. Prints the account, or nothing.
+_cca_route_ask() {
+  emulate -L zsh
+  local -a names=(${${(f)"$(_cca_instances)"}%%$'\t'*})
+  (( $#names )) || return 1
+  osascript - $names 2>/dev/null <<'AS'
+on run argv
+	activate
+	set picked to choose from list argv with title "Claude Link Router" with prompt "Which Claude account should open this link?" OK button name "Open" cancel button name "Cancel"
+	if picked is false then return ""
+	return item 1 of picked
+end run
+AS
+}
+
+# Hands a URL to one process the way macOS does (a "get URL" Apple Event), then
+# brings that process to the front.
+_cca_send_url() {
+  osascript -l JavaScript - "$1" "$2" >/dev/null 2>&1 <<'JS'
+ObjC.import('AppKit');
+function run(argv) {
+  var pid = Number(argv[0]), GURL = 0x4755524C, DIRECT = 0x2D2D2D2D;
+  var target = $.NSAppleEventDescriptor.descriptorWithProcessIdentifier(pid);
+  var ev = $.NSAppleEventDescriptor.appleEventWithEventClassEventIDTargetDescriptorReturnIDTransactionID(GURL, GURL, target, -1, 0);
+  ev.setParamDescriptorForKeyword($.NSAppleEventDescriptor.descriptorWithString(argv[1]), DIRECT);
+  var err = Ref();
+  // Wait up to 8 s for the copy to confirm it took the link; it may interact.
+  var reply = ev.sendEventWithOptionsTimeoutError(0x23, 8, err);
+  if (reply.isNil() || (err[0] && !err[0].isNil())) throw new Error('not delivered');
+  var app = $.NSRunningApplication.runningApplicationWithProcessIdentifier(pid);
+  if (!app.isNil()) app.activateWithOptions(2);
+}
+JS
+}
+
+# Adds a line to the router log: time, account, what happened, and only the
+# start of the link (claude://host/first-part), never its code.
+_cca_route_log() {
+  emulate -L zsh
+  local f=$CCA_HOME/router.log u=${3%%[?#]*} rest host part
+  if [[ $u == claude://* ]]; then
+    rest=${u#claude://}
+    host=${rest%%/*} part=
+    [[ $rest == */* ]] && part=${${rest#*/}%%/*}
+    # Plain characters only, so a crafted link cannot write a line of its own.
+    host=${host//[^A-Za-z0-9._-]/} part=${part//[^A-Za-z0-9._-]/}
+    u="claude://$host${part:+/$part}"
+  else
+    u="claude:(no host)"
+  fi
+  (
+    umask 077
+    print -r -- "$(date '+%Y-%m-%d %H:%M:%S')"$'\t'"$1"$'\t'"$2"$'\t'"$u" >> $f
+    if (( $(wc -l < $f) > 400 )); then
+      tail -n 200 $f > $f.cca-tmp && mv -f $f.cca-tmp $f
+    fi
+  ) 2>/dev/null
+  return 0
+}
+
+# Passes a claude:// link to the right Claude copy. The router app runs this.
+_cca_route() {
+  emulate -L zsh
+  local url=$1 pick pid name why rc
+  if [[ $url != claude:* ]]; then
+    _cca_err "usage: cca route <claude:// link>"
+    return 1
+  fi
+  pick=$(_cca_route_pick); rc=$?
+  if (( rc == 1 )); then
+    _cca_route_log - "no copy open: opened Claude" $url
+    open -a $CCA_CLAUDE_APP $url
+    return
+  elif (( rc == 2 )); then
+    name=$(_cca_route_ask)
+    if [[ -z $name ]] || ! pid=$(_cca_app_pid $name); then
+      _cca_route_log - "no copy chosen: link dropped" $url
+      return 1
+    fi
+    why="the copy you chose"
+  else
+    pid=${pick%%$'\t'*}; name=${${pick#*$'\t'}%%$'\t'*}; why=${pick##*$'\t'}
+  fi
+  if _cca_send_url $pid $url; then
+    _cca_route_log $name "sent to $why" $url
+  else
+    _cca_route_log $name "could not reach $why: opened Claude instead" $url
+    open -a $CCA_CLAUDE_APP $url
+  fi
+}
+
+# Prints the path of the app that opens claude:// links now.
+_cca_link_opener() {
+  osascript -l JavaScript -e 'ObjC.import("AppKit"); var u = $.NSWorkspace.sharedWorkspace.URLForApplicationToOpenURL($.NSURL.URLWithString("claude://x")); u.isNil() ? "" : ObjC.unwrap(u.path)' 2>/dev/null
+}
+
+# Makes the app with bundle id $1 the opener of claude:// links.
+_cca_set_link_opener() {
+  osascript -l JavaScript - "$1" >/dev/null 2>&1 <<'JS'
+ObjC.import('CoreServices');
+function run(argv) {
+  var st = $.LSSetDefaultHandlerForURLScheme($('claude'), $(argv[0]));
+  if (st !== 0) throw new Error('LaunchServices ' + st);
+}
+JS
+}
+
+# Makes the router app. It does not make it the opener: `cca router on` does.
+_cca_router_build() {
+  emulate -L zsh
+  local dest=$CCA_ROUTER_APP out icon tmp
+  local res=$dest/Contents/Resources plist=$dest/Contents/Info.plist
+  if [[ -e $dest && ! -e $res/cca-router ]]; then
+    _cca_err "$dest exists and was not made by cca, so it was left alone"
+    return 1
+  fi
+  if [[ -z $CCA_SCRIPT || $CCA_SCRIPT == *[\"\\]* ]]; then
+    _cca_err "cannot build the router from this cca file path: $CCA_SCRIPT"
+    return 1
+  fi
+  if [[ $CCA_CLAUDE_APP == *[\"\\]* ]]; then
+    _cca_err "cannot build the router with this Claude path: $CCA_CLAUDE_APP"
+    return 1
+  fi
+  tmp=$(mktemp -d "${TMPDIR:-/tmp}/cca-router.XXXXXX") || return 1
+  # If cca.zsh cannot be loaded (moved, broken), the link goes to Claude as
+  # before. The shell part always succeeds, so no error dialog shows.
+  print -r -- "on open location theURL
+	do shell script \"/bin/zsh -f -c 'if source \\\"\$1\\\" 2>/dev/null; then _cca_route \\\"\$3\\\"; else open -a \\\"\$2\\\" \\\"\$3\\\"; fi; true' cca-route \" & quoted form of \"$CCA_SCRIPT\" & \" \" & quoted form of \"$CCA_CLAUDE_APP\" & \" \" & quoted form of theURL
+end open location
+
+on run
+	activate
+	display dialog \"Claude Link Router passes claude:// links to the Claude copy you used last. Turn it off with: cca router off\" buttons {\"OK\"} default button 1 with title \"Claude Link Router\"
+end run" > $tmp/router.applescript
+  [[ -e $dest ]] && rm -rf $dest
+  mkdir -p ${dest:h}
+  out=$(osacompile -o $dest $tmp/router.applescript 2>&1)
+  local ok=$?
+  rm -rf $tmp
+  (( ok == 0 )) || { _cca_err "osacompile failed: $out"; return 1 }
+  plutil -replace CFBundleIdentifier -string $CCA_ROUTER_ID $plist &&
+    plutil -replace CFBundleURLTypes -json '[{"CFBundleURLName":"Claude links","CFBundleURLSchemes":["claude"]}]' $plist &&
+    plutil -replace LSUIElement -bool YES $plist &&
+    plutil -replace NSAppleEventsUsageDescription -string 'Claude Link Router passes claude:// links to the copy of Claude you used last.' $plist \
+    || { _cca_err "could not set up $plist"; return 1 }
+  icon=$(defaults read $CCA_CLAUDE_APP/Contents/Info CFBundleIconFile 2>/dev/null)
+  if [[ -n $icon ]] && cp $CCA_CLAUDE_APP/Contents/Resources/${icon%.icns}.icns $res/applet.icns 2>/dev/null; then
+    rm -f $res/Assets.car
+    plutil -remove CFBundleIconName $plist 2>/dev/null
+  fi
+  # The marker holds the cca.zsh path built in, so a moved cca.zsh is noticed.
+  print -r -- $CCA_SCRIPT > $res/cca-router
+  codesign --force --sign - $dest 2>/dev/null || { _cca_err "could not sign $dest"; return 1 }
+  print -r -- "Made: $dest"
+}
+
+# True when the router app exists, was made by cca, and calls this cca.zsh.
+_cca_router_current() {
+  [[ -r $CCA_ROUTER_APP/Contents/Resources/cca-router &&
+     $(<$CCA_ROUTER_APP/Contents/Resources/cca-router) == "$CCA_SCRIPT" ]]
+}
+
+# Gives claude:// links back to the router if a Claude copy took them (each copy
+# claims them when it starts). The dev.cca.router launchd job runs this.
+_cca_router_guard() {
+  emulate -L zsh
+  [[ -e $CCA_ROUTER_APP/Contents/Resources/cca-router ]] || return 0
+  local cur=$(_cca_link_opener)
+  [[ -n $cur && ${cur:A} != ${CCA_ROUTER_APP:A} ]] || return 0
+  _cca_set_link_opener $CCA_ROUTER_ID && _cca_route_log - "took the links back from ${cur:t}" claude://
+}
+
+# Loads (on) or removes (off) the launchd job that runs _cca_router_guard when
+# macOS's link settings change, and every 2 minutes.
+_cca_router_job() {
+  emulate -L zsh
+  local plist=$CCA_LAUNCH_AGENTS/dev.cca.router.plist home=${CCA_HOME:A} cmd watch
+  local app=${CCA_ROUTER_APP:A} claude=${CCA_CLAUDE_APP:A}
+  if [[ $1 == off ]]; then
+    _cca_launchctl bootout gui/$UID $plist >/dev/null 2>&1
+    rm -f $plist
+    return 0
+  fi
+  mkdir -p $CCA_LAUNCH_AGENTS $home && chmod 700 $home || return 1
+  watch=$HOME/Library/Preferences/com.apple.LaunchServices
+  cmd="source ${(q)home}/cca.zsh && _cca_router_guard"
+  cmd=${cmd//&/&amp;} cmd=${cmd//</&lt;} home=${home//&/&amp;} home=${home//</&lt;}
+  app=${app//&/&amp;} app=${app//</&lt;} claude=${claude//&/&amp;} claude=${claude//</&lt;}
+  watch=${watch//&/&amp;} watch=${watch//</&lt;}
+  print -r -- '<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>dev.cca.router</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string><string>-f</string><string>-c</string>
+    <string>'$cmd'</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>CCA_HOME</key><string>'$home'</string>
+    <key>CCA_ROUTER_APP</key><string>'$app'</string>
+    <key>CCA_CLAUDE_APP</key><string>'$claude'</string>
+  </dict>
+  <key>WatchPaths</key>
+  <array><string>'$watch'</string></array>
+  <key>StartInterval</key><integer>120</integer>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>/dev/null</string>
+  <key>StandardErrorPath</key><string>/dev/null</string>
+</dict>
+</plist>' > $plist || return 1
+  _cca_launchctl bootout gui/$UID $plist >/dev/null 2>&1
+  _cca_launchctl bootstrap gui/$UID $plist || { _cca_err "launchctl could not load $plist"; return 1 }
+}
+
+_cca_router() {
+  emulate -L zsh
+  local cur
+  case ${1:-status} in
+    on)
+      [[ -d $CCA_CLAUDE_APP ]] || { _cca_err "Claude is not at $CCA_CLAUDE_APP"; return 1 }
+      if ! _cca_router_current; then
+        _cca_router_build || return 1
+      fi
+      _cca_lsregister -f $CCA_ROUTER_APP 2>/dev/null
+      _cca_set_link_opener $CCA_ROUTER_ID
+      cur=$(_cca_link_opener)
+      if [[ -z $cur || ${cur:A} != ${CCA_ROUTER_APP:A} ]]; then
+        _cca_err "macOS still opens claude:// links with: ${cur:-nothing}. Undo the rest: cca router off"
+        return 1
+      fi
+      _cca_router_job on || { _cca_err "the router is on, but the job that keeps it on did not load"; return 1 }
+      print -r -- "On: claude:// links now go to the Claude copy you used last."
+      print -r -- "A background job (dev.cca.router) takes them back each time a Claude copy claims them."
+      print -r -- "Undo: cca router off" ;;
+    off)
+      _cca_router_job off
+      _cca_set_link_opener $CCA_CLAUDE_ID
+      cur=$(_cca_link_opener)
+      if [[ -n $cur && ${cur:A} == ${CCA_ROUTER_APP:A} ]]; then
+        _cca_err "macOS did not give claude:// links back to Claude, so the router was kept. Try again: cca router off"
+        return 1
+      fi
+      if [[ -e $CCA_ROUTER_APP/Contents/Resources/cca-router ]]; then
+        _cca_lsregister -u $CCA_ROUTER_APP 2>/dev/null
+        _cca_trash $CCA_ROUTER_APP && print -r -- "Moved $CCA_ROUTER_APP to the Trash."
+      fi
+      cur=$(_cca_link_opener)
+      print -r -- "Off: claude:// links open with: ${cur:-nothing}" ;;
+    build)
+      _cca_router_build ;;
+    status)
+      cur=$(_cca_link_opener)
+      if [[ -n $cur && ${cur:A} == ${CCA_ROUTER_APP:A} ]]; then
+        print -r -- "Router: on. claude:// links go to the Claude copy you used last."
+      else
+        print -r -- "Router: off. claude:// links open with: ${cur:-nothing}"
+      fi
+      [[ -f $CCA_LAUNCH_AGENTS/dev.cca.router.plist ]] && print -r -- "Keep-on job: loaded (dev.cca.router)"
+      if [[ -e $CCA_ROUTER_APP/Contents/Resources/cca-router ]] && ! _cca_router_current; then
+        print -r -- "Note: the router app calls another cca.zsh. Rebuild it: cca router on"
+      fi
+      if [[ -s $CCA_HOME/router.log ]]; then
+        print
+        print -r -- "Last links:"
+        tail -n 5 $CCA_HOME/router.log | sed 's/^/  /'
+      fi ;;
+    *)
+      _cca_err "usage: cca router on|off|status"
+      return 1 ;;
+  esac
+}
+
 _cca_status() {
   emulate -L zsh
-  local r=$(_cca_resolve) line
+  local r=$(_cca_resolve) line name
+  local -a waiting lines
   print -r -- "Here: ${r%%$'\t'*}  (${r#*$'\t'})"
   print
   print -r -- "Accounts:"
@@ -1162,6 +1532,16 @@ _cca_status() {
     for line in "${(@f)$(<$CCA_HOME/bindings)}"; do
       [[ -n $line ]] && print -r -- "  ${line%%$'\t'*} -> ${line#*$'\t'}"
     done
+  fi
+  for name in ${(f)"$(_cca_profiles)"}; do
+    waiting=(${(f)"$(_cca_needs_signin $name)"})
+    (( $#waiting )) && lines+=("  $name: ${(j:, :)waiting}")
+  done
+  if (( $#lines )); then
+    print
+    print -r -- "Connectors waiting for sign-in (as Claude last saw them):"
+    print -rl -- $lines
+    print -r -- "  Sign in from the terminal: cca signin <name>"
   fi
 }
 
@@ -1183,6 +1563,10 @@ _cca_help() {
   cca bind <name> [folder]   always use an account in a folder and its subfolders
   cca unbind [folder]        remove a folder binding
   cca run <name> [args]      run claude once with an account
+  cca signin <name>          sign in an account's connectors (MCP servers) from the terminal;
+                             use it when a sign-in inside the app lands in another account
+  cca router on|off|status   send claude:// links (sign-ins coming back from the browser) to the
+                             Claude copy you used last, not to any open copy (off: undo)
   cca list [--json]          list accounts with their emails (--json: for scripts and the desktop app)
   cca app <name> [color]     make a 'Claude <Name>' app in ~/Applications for that account
                              (colors: red orange yellow green teal blue purple pink gray)
@@ -1232,6 +1616,9 @@ cca() {
     bind)           _cca_bind "$@" ;;
     unbind)         _cca_unbind "$@" ;;
     run)            _cca_run "$@" ;;
+    signin)         _cca_signin "$@" ;;
+    router)         _cca_router "$@" ;;
+    route)          _cca_route "$@" ;;
     app)            _cca_app "$@" ;;
     open)           _cca_open "$@" ;;
     chrome)         _cca_chrome "$@" ;;
@@ -1267,13 +1654,14 @@ claude() {
 }
 
 _cca_complete() {
-  local -a cmds=(status list add login use bind unbind run app open chrome remove backup restore autobackup update autoupdate version help)
+  local -a cmds=(status list add login use bind unbind run signin router app open chrome remove backup restore autobackup update autoupdate version help)
   if (( CURRENT == 2 )); then
     compadd -a cmds
   elif (( CURRENT == 3 )); then
     case $words[2] in
-      login|use|bind|run|app|open|chrome|remove|restore) compadd -- ${(f)"$(_cca_profiles)"} ;;
+      login|use|bind|run|signin|app|open|chrome|remove|restore) compadd -- ${(f)"$(_cca_profiles)"} ;;
       list|ls)            compadd -- --json ;;
+      router)             compadd -- on off status build ;;
       backup)             compadd -- list --quiet ;;
       autobackup|autoupdate) compadd -- on off status ;;
       unbind)             _files -/ ;;

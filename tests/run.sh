@@ -64,7 +64,11 @@ prof() { mkdir -p $A/profiles/$1 }
 # Stubs every test starts with; a test can define its own after them.
 SAFE='_cca_lsregister() { print -r -- "LSREGISTER $*" >> $T/lsregister.log }
 _cca_front() { print -r -- "FRONT $1" >> $T/front.log }
-_cca_quit_pid() { print -r -- "QUIT $1" >> $T/quit.log }'
+_cca_quit_pid() { print -r -- "QUIT $1" >> $T/quit.log }
+_cca_set_link_opener() { print -r -- "SETOPENER $1" >> $T/setopener.log }
+_cca_link_opener() { : }
+_cca_send_url() { print -r -- "SEND $1" >> $T/send-safe.log }
+_cca_route_ask() { : }'
 run() {
   env -u CLAUDECODE HOME=$H CCA_TRASH=$T/trash PATH=$T/bin:$PATH REPO=$REPO T=$T zsh -f -c 'source "$REPO/cca.zsh"; '"$SAFE"$'\n'"$1" 2>&1
 }
@@ -716,6 +720,14 @@ else
   [[ ! -e "$U/home/Applications/Claude Work.app" && -e "$U/home/Applications/Other.app" ]] && ok "uninstall: only cca launchers removed" || bad "uninstall: only cca launchers removed" "Work gone, Other kept" "$(ls $U/home/Applications)"
   [[ ! -e $U/home/.claude-accounts/cca.zsh && -d $U/home/.claude-accounts/profiles/keep ]] && ok "uninstall: script removed, data kept" || bad "uninstall: script removed, data kept" "cca.zsh gone, profiles kept" "$(ls -R $U/home/.claude-accounts)"
   eq "uninstall: .zshrc cleaned" "export A=1" "$(<$U/home/.zshrc)"
+  mk_uninst; jobs_on router
+  mkdir -p "$U/home/Applications/Claude Link Router.app/Contents/Resources"
+  print -r -- /x/cca.zsh > "$U/home/Applications/Claude Link Router.app/Contents/Resources/cca-router"
+  uninst; yes "uninstall: sign-in router: exits 0" $?
+  [[ ! -e $LA/dev.cca.router.plist ]] && ok "uninstall: router job removed" || bad "uninstall: router job removed" removed kept
+  has "uninstall: router job booted out" "launchctl bootout gui/$(id -u) $LA/dev.cca.router.plist" "$(<$U/launchctl.log)"
+  [[ ! -e "$U/home/Applications/Claude Link Router.app" ]] && ok "uninstall: router app removed" || bad "uninstall: router app removed" removed kept
+  has "uninstall: says the router went" "Removed the sign-in router" "$(<$U/out)"
   mk_uninst; jobs_on backup
   uninst; yes "uninstall: backup only: exits 0" $?
   [[ ! -e $LA/dev.cca.backup.plist ]] && ok "uninstall: backup only: removed" || bad "uninstall: backup only: removed" removed kept
@@ -785,8 +797,110 @@ no "restore: --account without a value fails" $rc
 has "restore: says --account needs a value" "--account needs a value" "$out"
 unset PV
 
+# 26. sign-in from the terminal, and the claude:// link router
+mk_home
+prof personal
+print -r -- '{"plugin:figma:figma":{"timestamp":1},"plugin:x:figma":{"timestamp":2},"higgsfield":{"timestamp":3}}' > $A/profiles/personal/mcp-needs-auth-cache.json
+out=$(run 'cca')
+has "status: lists connectors waiting for sign-in, once each" "personal: higgsfield, figma" "$out"
+has "status: says how to sign in" "cca signin <name>" "$out"
+out=$(run 'cca signin'); rc=$?
+no "signin without a name fails" $rc
+has "signin: usage" "usage: cca signin <name>" "$out"
+out=$(run 'cca signin personal </dev/null'); rc=$?
+no "signin outside a terminal fails" $rc
+has "signin: asks for a terminal" "run it in a terminal window" "$out"
+hasnt "signin outside a terminal: claude not started" "ARGS=" "$out"
+
+LA=$H/Library/LaunchAgents
+PL=$LA/dev.cca.router.plist
+RT='export CCA_LAUNCH_AGENTS=$HOME/Library/LaunchAgents CCA_ROUTER_APP=$T/apps/Router.app CCA_CLAUDE_APP=$T/Claude.app
+mkdir -p $CCA_CLAUDE_APP
+launchctl() { print -r -- "LAUNCHCTL $*" >> $T/launchctl.log; }
+_cca_router_build() { mkdir -p $CCA_ROUTER_APP/Contents/Resources && print -r -- $CCA_SCRIPT > $CCA_ROUTER_APP/Contents/Resources/cca-router; print -r -- BUILD >> $T/build.log; }
+_cca_set_link_opener() { print -r -- "SETOPENER $1" >> $T/opener.log; if [[ $1 == local.cca.claude-link-router ]]; then print -r -- $CCA_ROUTER_APP > $T/opener; else print -r -- $CCA_CLAUDE_APP > $T/opener; fi; }
+_cca_link_opener() { cat $T/opener 2>/dev/null; }'
+rm -rf $T/opener $T/opener.log $T/launchctl.log $T/build.log $T/apps
+out=$(run "$RT"$'\n''cca router on'); rc=$?
+yes "router on exits 0" $rc
+has "router on: says it is on" "On: claude:// links now go to the Claude copy you used last" "$out"
+eq "router on: builds the router app" BUILD "$(<$T/build.log)"
+has "router on: makes the router the opener" "SETOPENER local.cca.claude-link-router" "$(<$T/opener.log)"
+[[ -f $PL ]] && ok "router on: keep-on job written" || bad "router on: keep-on job written" "$PL" "missing"
+plutil -lint $PL >/dev/null 2>&1; yes "router job plist is valid" $?
+has "router job: runs the guard" "source $A/cca.zsh &amp;&amp; _cca_router_guard" "$(<$PL)"
+has "router job: watches the link settings" "Library/Preferences/com.apple.LaunchServices</string>" "$(<$PL)"
+has "router on: job loaded" "LAUNCHCTL bootstrap gui/$(id -u) $PL" "$(<$T/launchctl.log)"
+has "router on: app registered" "LSREGISTER -f $T/apps/Router.app" "$(<$T/lsregister.log)"
+out=$(run "$RT"$'\n''cca router status')
+has "router status: on" "Router: on" "$out"
+has "router status: job loaded" "Keep-on job: loaded" "$out"
+out=$(run "$RT"$'\n''cca router off'); rc=$?
+yes "router off exits 0" $rc
+has "router off: gives the links back to Claude" "SETOPENER com.anthropic.claudefordesktop" "$(<$T/opener.log)"
+[[ ! -e $PL ]] && ok "router off: job removed" || bad "router off: job removed" "gone" "still there"
+has "router off: job unloaded" "LAUNCHCTL bootout gui/$(id -u) $PL" "$(<$T/launchctl.log)"
+[[ ! -e $T/apps/Router.app && -n $(ls $T/trash 2>/dev/null | grep Router.app) ]] \
+  && ok "router off: app moved to the Trash" || bad "router off: app moved to the Trash" "in trash" "$(ls $T/apps $T/trash 2>&1)"
+has "router off: says where links go" "Off: claude:// links open with: $T/Claude.app" "$out"
+# macOS keeps the router as the opener: the app must stay.
+rm -rf $T/opener.log; out=$(run "$RT"$'\n''cca router on')
+out=$(run "$RT"$'\n''_cca_set_link_opener() { print -r -- "SETOPENER $1" >> $T/opener.log; }'$'\n''cca router off'); rc=$?
+no "router off: fails when macOS keeps the router" $rc
+[[ -e $T/apps/Router.app ]] && ok "router off: app kept when the links did not move" || bad "router off: app kept when the links did not move" "kept" "gone"
+out=$(run "$RT"$'\n''cca router nope'); rc=$?
+no "router: unknown action fails" $rc
+
+# Which copy gets a link
+PK='_cca_instances() { printf "opencode\t222\npersonal\t111\n"; }'
+eq "route: the copy in front gets the link" "111 personal the copy used last" "$(run "$PK"$'\n''_cca_front_pids() { print 999; print 111; print 222; }'$'\n''_cca_route_pick | tr "\t" " "')"
+eq "route: order decides" "222 opencode the copy used last" "$(run "$PK"$'\n''_cca_front_pids() { print 222; print 111; }'$'\n''_cca_route_pick | tr "\t" " "')"
+eq "route: one copy open" "111 personal the only copy open" "$(run '_cca_instances() { printf "personal\t111\n"; }'$'\n''_cca_route_pick | tr "\t" " "')"
+eq "route: several open, none visible -> ask" 2 "$(run "$PK"$'\n''_cca_front_pids() { print 999; }'$'\n''_cca_route_pick >/dev/null; print $?')"
+eq "route: no copy open" 1 "$(run '_cca_instances() { :; }'$'\n''_cca_route_pick >/dev/null; print $?')"
+
+# Routing a link: delivered, logged without its code, refused when not claude://
+rm -f $A/router.log $T/send.log $T/open.log
+out=$(run "$PK"$'\n''_cca_front_pids() { print 111; }'$'\n''_cca_send_url() { print -r -- "SEND $1 $2" >> $T/send.log; }'$'\n''cca route "claude://claude.ai/mcp-auth-callback?code=SECRET1&state=s"'); rc=$?
+yes "route exits 0" $rc
+eq "route: link handed to the copy in front" "SEND 111 claude://claude.ai/mcp-auth-callback?code=SECRET1&state=s" "$(<$T/send.log)"
+has "route: logged" "personal	sent to the copy used last	claude://claude.ai/mcp-auth-callback" "$(<$A/router.log)"
+hasnt "route: log keeps no code" "SECRET1" "$(<$A/router.log)"
+eq "route: log is private" 600 "$(mode $A/router.log)"
+out=$(run "$PK"$'\n''_cca_front_pids() { print 111; }'$'\n''_cca_send_url() { return 1; }'$'\n''cca route "claude://claude.ai/x?code=S2"')
+has "route: not delivered -> Claude opens it" "open -a /Applications/Claude.app claude://claude.ai/x?code=S2" "$(<$T/open.log)"
+rm -f $T/open.log
+out=$(run 'cca route "https://example.com/x"'); rc=$?
+no "route: refuses a link that is not claude://" $rc
+run 'u=$(printf "claude://h/p\nFAKE"); _cca_route_log - x "$u"; _cca_route_log - x "claude:SECRET3/x?y=1"' >/dev/null
+eq "route log: a newline cannot write its own line" 0 "$(grep -c '^FAKE' $A/router.log)"
+hasnt "route log: a link without a host is not logged" "SECRET3" "$(<$A/router.log)"
+
+# The guard gives the links back only when a Claude copy took them
+rm -f $T/opener.log
+run "$RT"$'\n''mkdir -p $CCA_ROUTER_APP/Contents/Resources; print -r -- $CCA_SCRIPT > $CCA_ROUTER_APP/Contents/Resources/cca-router; print -r -- $CCA_CLAUDE_APP > $T/opener'$'\n''_cca_router_guard' >/dev/null
+has "guard: takes the links back from Claude" "SETOPENER local.cca.claude-link-router" "$(<$T/opener.log)"
+rm -f $T/opener.log
+run "$RT"$'\n''_cca_router_guard' >/dev/null
+[[ ! -s $T/opener.log ]] && ok "guard: nothing to do when the router has them" || bad "guard: nothing to do when the router has them" "no call" "$(<$T/opener.log)"
+
+# The router app itself (real osacompile, built in the throwaway folder, never registered)
+if (( $+commands[osacompile] )) && (( $+commands[codesign] )); then
+  out=$(run 'CCA_ROUTER_APP=$T/build/Router.app _cca_router_build'); rc=$?
+  yes "router build exits 0" $rc
+  P=$T/build/Router.app/Contents/Info.plist
+  eq "router app: bundle id" local.cca.claude-link-router "$(plutil -extract CFBundleIdentifier raw -o - $P 2>&1)"
+  eq "router app: opens claude:// links" claude "$(plutil -extract CFBundleURLTypes.0.CFBundleURLSchemes.0 raw -o - $P 2>&1)"
+  eq "router app: no Dock icon" true "$(plutil -extract LSUIElement raw -o - $P 2>&1)"
+  eq "router app: knows its cca.zsh" "$REPO/cca.zsh" "$(<$T/build/Router.app/Contents/Resources/cca-router)"
+  has "router app: falls back to Claude when cca.zsh cannot load" "else open -a" "$(osadecompile $T/build/Router.app/Contents/Resources/Scripts/main.scpt 2>&1)"
+  [[ ! -s $T/lsregister.log || $(<$T/lsregister.log) != *build/Router.app* ]] && ok "router build: not registered" || bad "router build: not registered" "no lsregister" "$(<$T/lsregister.log)"
+else
+  skip "router app build (osacompile or codesign missing)"
+fi
+
 # A test that reached a safety stub forgot its own stub; say so.
-for f in open launchctl-path front quit; do
+for f in open launchctl-path front quit setopener send-safe; do
   [[ -s $T/$f.log ]] && print -r -- "note - a test reached the $f safety stub: $(head -1 $T/$f.log)"
 done
 

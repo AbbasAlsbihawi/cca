@@ -42,6 +42,10 @@ Each account keeps its own login, conversation transcripts, memory, MCP sign-ins
 
 Backups are unencrypted local copies of every account's conversation transcripts and Code tab session lists, plus CCA's bindings and settings. Conversations can contain source code, file contents and anything pasted into a chat, so treat `~/.claude-accounts/backups` as sensitive. Backups do not contain logins or tokens. Details: [backup-restore.md](backup-restore.md).
 
+## The sign-in router
+
+`cca router on` (macOS, off by default) makes a small app the opener of `claude://` links and adds a launchd job that keeps it so. A link can carry an MCP sign-in code. The router hands it straight to one running Claude app copy, by its process, and writes only the start of the link to `~/.claude-accounts/router.log`. While it routes, the link is in the arguments of short-lived local processes, which other programs running as you can see. `cca router off` removes the app and the job and gives the links back to Claude.
+
 ## What CCA does not protect against
 
 CCA is an organizing tool, **not a security boundary**:

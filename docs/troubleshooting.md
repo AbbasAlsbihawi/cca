@@ -44,7 +44,7 @@ Quit every Claude copy, open only that one, log out, then log in.
 The link returns through `claude://`, which can reach any open copy. Quit every Claude window (Cmd+Q), open only the copy you are signing in, sign in, then reopen the others.
 
 **An MCP server sign-in goes to the wrong copy**
-Sign it in from the terminal instead: `cca run <name>`, then `/mcp`. The terminal sign-in returns to `localhost`, not `claude://`.
+The sign-in comes back through `claude://`, which macOS gives to any open copy. Either sign it in from the terminal: `cca signin <name>`, then `/mcp` (the terminal sign-in returns to `localhost`, not `claude://`). Or run `cca router on` once: sign-ins then go to the copy you used last. `cca router status` shows where the last links went; `cca router off` undoes it.
 
 **"could not bring '…' to the front" (macOS)**
 Allow the launcher, or your terminal, to control System Events in System Settings → Privacy & Security → Automation.

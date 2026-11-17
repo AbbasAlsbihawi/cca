@@ -1,5 +1,5 @@
 #!/bin/sh
-# Uninstall cca: removes the ~/.zshrc lines, cca.zsh and cca launcher apps.
+# Uninstall cca: removes the ~/.zshrc lines, cca.zsh, cca launcher apps and the sign-in router.
 # Account data and backups in ~/.claude-accounts are kept.
 set -e
 
@@ -31,8 +31,9 @@ fi
 
 rm -f "$HOME/.claude-accounts/cca.zsh"
 
-# The launchd jobs cca can add: the daily backup and Claude app autoupdate.
-for job in backup:"daily backup" update:"autoupdate"; do
+# The launchd jobs cca can add: the daily backup, Claude app autoupdate and
+# the job that keeps the sign-in router on.
+for job in backup:"daily backup" update:"autoupdate" router:"sign-in router"; do
   plist="$HOME/Library/LaunchAgents/dev.cca.${job%%:*}.plist"
   if [ -f "$plist" ]; then
     launchctl bootout "gui/$(id -u)" "$plist" 2>/dev/null || true
@@ -40,6 +41,18 @@ for job in backup:"daily backup" update:"autoupdate"; do
     echo "Removed the ${job#*:} job"
   fi
 done
+
+# The sign-in router (`cca router on`): give claude:// links back to Claude,
+# then remove it. Under the test suite macOS's link opener is never touched.
+router="$HOME/Applications/Claude Link Router.app"
+if [ -e "$router/Contents/Resources/cca-router" ]; then
+  if [ -z "${CCA_TEST_APPLICATIONS:-}" ]; then
+    osascript -l JavaScript -e 'ObjC.import("CoreServices"); $.LSSetDefaultHandlerForURLScheme($("claude"), $("com.anthropic.claudefordesktop"))' >/dev/null 2>&1 || true
+    /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -u "$router" 2>/dev/null || true
+  fi
+  rm -rf "$router"
+  echo "Removed the sign-in router; Claude opens claude:// links again"
+fi
 
 for app in "$HOME"/Applications/*.app; do
   [ -d "$app" ] || continue

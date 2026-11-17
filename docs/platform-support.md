@@ -14,6 +14,7 @@
 | CCA desktop app self-update | Supported | Supported |
 | Claude in Chrome per account (`cca chrome`) | Supported | Not available |
 | Restart after Claude app updates (`cca update`, `cca autoupdate`) | Supported | Not available |
+| Sign-in router and terminal sign-in (`cca router`, `cca signin`) | Supported | Not available |
 | `cca import` (old name of `restore`) | Supported | Not available |
 | Linux | Not supported | — |
 

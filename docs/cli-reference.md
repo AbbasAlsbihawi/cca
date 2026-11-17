@@ -121,6 +121,12 @@ cca run acme --continue
 
 `cca run` also works where the `claude` wrapper is not loaded, which makes it the way to use a specific account from scripts.
 
+### `cca signin <name>` (macOS)
+
+Opens `claude` in the terminal with an account, after listing the MCP servers that last asked that account to sign in. Type `/mcp`, pick the server and sign in, then `/exit`. A terminal sign-in returns to `localhost`, so it cannot land in another account's Claude app copy. Chats already open in the app see the new sign-in in a new chat. It refuses to run outside a terminal.
+
+`cca` on its own also lists, per account, the MCP servers waiting for a sign-in, as Claude last saw them.
+
 ## Claude desktop app
 
 See [desktop.md](desktop.md) for how these fit together.
@@ -155,6 +161,16 @@ Quits every open Claude app copy, as Cmd+Q does, and opens it again, so each one
 ### `cca autoupdate on|off|status` (macOS)
 
 `on` adds a launchd job that runs once a minute and whenever `/Applications` changes. After the Claude app updates, it restarts every copy that was open, reopens copies that closed for the update, and closes the default copy that the Claude updater opened in their place. The log is `~/.claude-accounts/autoupdate.log`. `off` removes the job; `status` shows whether it is on and the installed Claude version.
+
+### `cca router on|off|status` (macOS)
+
+macOS hands every `claude://` link to one running copy of Claude.app, the one it picks. With a copy open per account, an MCP sign-in started in one copy can come back to another and stay stuck on "Complete sign-in in your browser".
+
+- `on` makes `~/Applications/Claude Link Router.app` the opener of `claude://` links. Each link goes to the copy you used last (the one in front of the other copies); when no copy is visible it asks which account. If `cca.zsh` cannot be loaded, the link goes to Claude.app as before. Every Claude copy claims `claude://` links again when it starts, so `on` also adds a launchd job (`dev.cca.router`) that gives them back to the router when macOS's link settings change, and every 2 minutes.
+- `off` removes the job, makes Claude.app the opener again, and moves the router app to the Trash. If macOS does not give the links back to Claude, the router is kept and `off` says so.
+- `status` shows which app opens `claude://` links and the last links routed.
+
+The log is `~/.claude-accounts/router.log` (mode 600). It keeps only the start of each link, such as `claude://claude.ai/mcp-auth-callback`, never the sign-in code. `cca signin` does the same job without changing anything.
 
 ## Claude in Chrome
 
