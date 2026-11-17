@@ -6,6 +6,8 @@ Each entry is taken from the Git tags, the GitHub release notes and the merged p
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-18
+
 ### Added
 
 - macOS: `cca router on|off|status`, an opt-in fix for MCP sign-ins that land in the wrong Claude app copy. A small app becomes the opener of `claude://` links and hands each one to the copy used last, or asks which account; a launchd job (`dev.cca.router`) gives the links back to it when a Claude copy claims them on start. `off` undoes all of it. The log never keeps sign-in codes.
@@ -156,7 +158,8 @@ First release.
 - Windows PowerShell port: `cca.ps1`, `install.ps1` and `uninstall.ps1` ([#1](https://github.com/AbbasAlsbihawi/cca/pull/1), by [AhmedAbasss](https://github.com/AhmedAbasss)).
 - Claude Accounts: one desktop app for macOS and Windows, with automatic updates ([#2](https://github.com/AbbasAlsbihawi/cca/pull/2)).
 
-[Unreleased]: https://github.com/AbbasAlsbihawi/cca/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/AbbasAlsbihawi/cca/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/AbbasAlsbihawi/cca/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/AbbasAlsbihawi/cca/compare/v0.1.12...v0.2.0
 [0.1.12]: https://github.com/AbbasAlsbihawi/cca/compare/v0.1.11...v0.1.12
 [0.1.11]: https://github.com/AbbasAlsbihawi/cca/compare/v0.1.10...v0.1.11
