@@ -26,7 +26,7 @@ $script:CCA_SCRIPT = $MyInvocation.MyCommand.Path
 
 # The CCA version. desktop/package.json is the source: `npm version` in desktop\
 # rewrites this line (scripts/sync-version.js), and CI fails if it differs.
-$script:CCA_VERSION = '0.2.0'
+$script:CCA_VERSION = '0.2.1'
 
 # The desktop app's New Terminal starts PowerShell with CCA_ACCOUNT in the
 # environment, which cca.zsh reads directly on macOS. Take it as this terminal's
